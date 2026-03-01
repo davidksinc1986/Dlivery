@@ -1,0 +1,35 @@
+<html><head>
+        <title>WebSocket Test</title>
+        <!-- ESTA LÍNEA ES CRUCIAL: Carga la librería cliente de Socket.IO -->
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    </head>
+    <body>
+        <h1>Prueba de Conexión WebSocket</h1>
+        <p>Abre la consola del navegador (F12) para ver los mensajes.</p>
+        <div id="messages">
+            <!-- Aquí aparecerán los mensajes de conexión/desconexión -->
+        </div>
+        <script>
+            // Intenta conectar con tu servidor Socket.IO en localhost:3001
+            // La variable 'io' ya está disponible gracias a la línea <script src="..."> de arriba
+            const socket = io("http://localhost:3001");
+
+            socket.on("connect", () => {
+                console.log("Conectado al servidor WebSocket!", socket.id);
+                document.getElementById("messages").innerHTML += `<p style="color: green;">✅ Conectado con ID: ${socket.id}</p>`;
+            });
+
+            socket.on("disconnect", () => {
+                console.log("Desconectado del servidor WebSocket.");
+                document.getElementById("messages").innerHTML += `<p style="color: red;">❌ Desconectado.</p>`;
+            });
+
+            socket.on("connect_error", (err) => {
+                console.error("Error de conexión al WebSocket:", err.message);
+                document.getElementById("messages").innerHTML += `<p style="color: red;">❌ Error: ${err.message}</p>`;
+            });
+
+            console.log("Intentando conectar al WebSocket desde el navegador...");
+        </script>
+    
+    </body></html>
