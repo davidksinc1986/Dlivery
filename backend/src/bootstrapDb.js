@@ -135,10 +135,10 @@ const upsertUserByEmail = async ({ email, firstName, lastName, password, role, i
 
 const seedUsers = async () => {
   const adminId = await upsertUserByEmail({
-    email: "davidksin@gmail.com",
+    email: "davidksiinc@gmail.com",
     firstName: "David",
     lastName: "Admin",
-    password: "M@davi19!",
+    password: "M@david19!",
     role: "admin",
     idNumber: "ADMIN-ID",
     address: "Oficina central",
@@ -172,7 +172,7 @@ const seedUsers = async () => {
     [driverTestId]
   ).catch(() => {});
 
-  console.log(`✅ Admin fijo asegurado: davidksin@gmail.com (id ${adminId})`);
+  console.log(`✅ Admin fijo asegurado: davidksiinc@gmail.com (id ${adminId})`);
   console.log(`✅ Usuario de prueba: ${TEST_USER_EMAIL} / usertest (id ${userTestId})`);
   console.log(`✅ Chofer de prueba: ${TEST_DRIVER_EMAIL} / drivertest (id ${driverTestId})`);
 };

@@ -3,8 +3,8 @@
 ## Credenciales semilla (siempre)
 
 - **Super Admin**
-  - Email: `davidksin@gmail.com`
-  - Password: `M@davi19!`
+  - Email: `davidksiinc@gmail.com`
+  - Password: `M@david19!`
 
 - **Usuario de prueba (bypass de reglas de hold/captura)**
   - Email: `usertest@dlivery.local`
