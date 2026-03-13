@@ -189,3 +189,119 @@ input, select {
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
   animation: shimmer 2.8s infinite;
 }
+
+/* --- Auth layout refresh --- */
+.auth-container {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 22px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.auth-showcase {
+  border-radius: 14px;
+  padding: 22px;
+  color: #f8fbff;
+  background: linear-gradient(145deg, #0f3f91, #1d4ed8 58%, #0ea5e9);
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-badge {
+  width: fit-content;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.17);
+  letter-spacing: 0.3px;
+}
+
+.auth-showcase h2 {
+  margin: 14px 0 10px;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.auth-showcase-text {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.auth-image-grid {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-top: 20px;
+}
+
+.auth-image {
+  border-radius: 10px;
+  min-height: 125px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 10px 20px rgba(2, 8, 23, 0.2);
+}
+
+.auth-image-express {
+  background-image: linear-gradient(rgba(15, 23, 42, 0.3), rgba(15, 23, 42, 0.3)),
+    url("https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=900&q=80");
+}
+
+.auth-image-truck {
+  background-image: linear-gradient(rgba(15, 23, 42, 0.3), rgba(15, 23, 42, 0.3)),
+    url("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=900&q=80");
+}
+
+.auth-image-moto {
+  background-image: linear-gradient(rgba(15, 23, 42, 0.3), rgba(15, 23, 42, 0.3)),
+    url("https://images.unsplash.com/photo-1594736797933-d0b22f6f4f18?auto=format&fit=crop&w=900&q=80");
+}
+
+.auth-image-light {
+  background-image: linear-gradient(rgba(15, 23, 42, 0.3), rgba(15, 23, 42, 0.3)),
+    url("https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=900&q=80");
+}
+
+.auth-form-panel {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 22px;
+}
+
+.auth-form-panel h1 {
+  margin-bottom: 10px;
+}
+
+.auth-form-panel .primary-button {
+  width: 100%;
+}
+
+.vehicle-type-list {
+  display: grid;
+  gap: 8px;
+}
+
+.vehicle-type-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.vehicle-type-list input {
+  width: auto;
+}
+
+@media (max-width: 920px) {
+  .auth-container {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-showcase {
+    min-height: 340px;
+  }
+}
