@@ -15,6 +15,9 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const authMiddleware = require("./middleware/authMiddleware");
 const authController = require("./controllers/authController"); 
 const paymentController = require("./controllers/paymentController");
+const adminRoutes = require("./routes/adminRoutes");
+const { bootstrapDb } = require("./bootstrapDb");
+const { startPaymentHoldReleaseJob } = require("./jobs/paymentHoldJobs");
 
 const app = express();
 const server = http.createServer(app);
@@ -66,9 +69,22 @@ app.get("/services", async (req, res) => {
   }
 });
 
+
+app.get("/pricing-config", async (_req, res) => {
+  try {
+    const pricing = await pool.query("SELECT vehicle_type, first_km_price, per_km_price FROM pricing_rules ORDER BY vehicle_type");
+    const commission = await pool.query("SELECT value FROM app_settings WHERE key = 'app_commission_percent'");
+    res.json({ pricing: pricing.rows, commissionPercent: Number(commission.rows[0]?.value || 20) });
+  } catch (err) {
+    res.status(500).json({ error: "No se pudo cargar configuración de precios." });
+  }
+});
 // RUTAS DE AUTENTICACIÓN CON MANEJO DE ARCHIVOS (VIA MULTER)
 // El registro NO RECIBE ARCHIVOS. Solo se envían campos de texto.
-app.post("/auth/register", upload.none(), authController.register); 
+app.post("/auth/register", upload.fields([
+    { name: 'profilePicture', maxCount: 1 },
+    { name: 'document', maxCount: 1 }
+]), authController.register); 
 app.post("/auth/login", authController.login); 
 app.get("/auth/profile", authMiddleware.verifyToken, authController.getProfile);
 // updateProfile SÍ recibe archivos (foto de perfil y/o documento)
@@ -82,6 +98,7 @@ app.put("/auth/change-password", authMiddleware.verifyToken, authController.chan
 app.use("/deliveries", deliveryRoutes);
 app.use("/drivers", driverRoutes);
 app.use("/payments", paymentRoutes); 
+app.use("/admin", adminRoutes);
 
 // --- MANEJO DE CONEXIONES SOCKET.IO ---
 io.on("connection", (socket) => {
@@ -173,6 +190,14 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
-  console.log(`Servidor de Express y Socket.IO corriendo en puerto ${PORT}`);
-});
+bootstrapDb()
+  .then(() => {
+    startPaymentHoldReleaseJob();
+    server.listen(PORT, () => {
+      console.log(`Servidor de Express y Socket.IO corriendo en puerto ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Error en bootstrap de base de datos:", error.message);
+    process.exit(1);
+  });

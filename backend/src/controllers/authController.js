@@ -41,14 +41,18 @@ const uploadFileToSupabase = async (file, folder = 'user-uploads') => {
 exports.register = async (req, res) => {
   try {
     const { first_name, last_name, email, password, role, id_number, address } = req.body;
-    let vehicleDetails = req.body.vehicleDetails ? JSON.parse(req.body.vehicleDetails) : []; // Parseamos el JSON STRING
-    
-    // NOTA: En el registro inicial NO se reciben archivos por Multer
-    // const documentFile = req.files?.document ? req.files.document[0] : null;                   
+    let vehicleDetails = req.body.vehicleDetails ? JSON.parse(req.body.vehicleDetails) : [];
+
+    const profilePictureFile = req.files?.profilePicture ? req.files.profilePicture[0] : null;
+    const documentFile = req.files?.document ? req.files.document[0] : null;                   
 
     // 1. Validar que no falten datos esenciales (id_number y address son requeridos para TODOS)
     if (!first_name || !email || !password || !role || !id_number || !address) {
       return res.status(400).json({ error: "Faltan campos obligatorios: nombre, email, contraseña, rol, identificación y dirección." });
+    }
+
+    if (!profilePictureFile) {
+      return res.status(400).json({ error: "La foto de perfil es obligatoria para crear la cuenta." });
     }
     
     // Validar el rol
@@ -66,8 +70,9 @@ exports.register = async (req, res) => {
                 return res.status(400).json({ error: "Cada vehículo debe tener tipo y placa." });
             }
         }
-        // NOTA: Documento ya no es obligatorio en el registro inicial (se sube en el perfil)
-        // if (!documentFile) { return res.status(400).json({ error: "Los conductores deben subir un documento de identificación." }); }
+                if (!documentFile) {
+          return res.status(400).json({ error: "Los conductores deben subir un documento de identificación en el registro." });
+        }
     }
 
     // 2. Verificar si el email ya está registrado
@@ -76,8 +81,17 @@ exports.register = async (req, res) => {
       return res.status(409).json({ error: "El email ya está registrado." });
     }
 
-    // 3. NO SE SUBEN ARCHIVOS EN EL REGISTRO INICIAL
-    let documentUrl = null; // Se establecerá a NULL
+        let documentUrl = null;
+    let profilePictureUrl = null;
+
+    try {
+      profilePictureUrl = await uploadFileToSupabase(profilePictureFile, "profile-pictures");
+      if (documentFile) {
+        documentUrl = await uploadFileToSupabase(documentFile, "identification-documents");
+      }
+    } catch (uploadError) {
+      return res.status(500).json({ error: `No se pudieron subir los archivos: ${uploadError.message}` });
+    }
 
     // 4. Encriptar la contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -87,9 +101,9 @@ exports.register = async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO users(first_name, last_name, email, password, created_at, role, is_available, vehicle_types, id_number, address, document_url, profile_picture_url) 
-       VALUES($1, $2, $3, $4, NOW(), $5, FALSE, $6, $7, $8, NULL, NULL) 
+       VALUES($1, $2, $3, $4, NOW(), $5, FALSE, $6, $7, $8, $9, $10) 
        RETURNING id, first_name, last_name, email, role, is_available, vehicle_types, id_number, address, document_url, profile_picture_url`, 
-      [first_name, last_name || null, email, hashedPassword, role, userVehicleTypes, id_number, address]
+      [first_name, last_name || null, email, hashedPassword, role, userVehicleTypes, id_number, address, documentUrl, profilePictureUrl]
     );
 
     const newUser = result.rows[0];

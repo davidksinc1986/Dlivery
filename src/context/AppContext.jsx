@@ -11,6 +11,7 @@ const [distance, setDistance] = useState(0);
 const [priceData, setPriceData] = useState(null);
 const [offer, setOffer] = useState("");
 const [deliveries, setDeliveries] = useState([]); 
+const [pricingConfig, setPricingConfig] = useState({ commissionPercent: 20, pricingRules: {} });
 
 const [token, setToken] = useState(localStorage.getItem('token'));
 const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')));
@@ -35,7 +36,7 @@ const login = async (email, password) => {
 };
 
 // Función para registrar un nuevo usuario
-const register = async (first_name, last_name, id_number, address, email, password, role, vehicleDetails) => { // YA NO RECIBE ARCHIVOS DIRECTAMENTE
+const register = async (first_name, last_name, id_number, address, email, password, role, vehicleDetails, profilePicture, document) => {
   try {
     const formData = new FormData();
     formData.append('first_name', first_name);
@@ -46,12 +47,15 @@ const register = async (first_name, last_name, id_number, address, email, passwo
     formData.append('password', password);
     formData.append('role', role);
     
-    // vehicleDetails se envía como JSON string
     if (vehicleDetails && vehicleDetails.length > 0) { 
         formData.append('vehicleDetails', JSON.stringify(vehicleDetails));
     }
-    // NO HAY ARCHIVOS EN EL REGISTRO INICIAL
-    // if (document) { formData.append('document', document); }
+    if (profilePicture) {
+      formData.append('profilePicture', profilePicture);
+    }
+    if (document) {
+      formData.append('document', document);
+    }
 
     const response = await api.post('/auth/register', formData);
     console.log("Registro exitoso:", response.data);
@@ -59,6 +63,23 @@ const register = async (first_name, last_name, id_number, address, email, passwo
   } catch (error) {
     console.error("Error en el registro:", error.response?.data?.error || error.message);
     return false;
+  }
+};
+
+
+const fetchPricingConfig = async () => {
+  try {
+    const response = await api.get('/pricing-config');
+    const rules = (response.data.pricing || []).reduce((acc, row) => {
+      acc[row.vehicle_type] = row;
+      return acc;
+    }, {});
+    setPricingConfig({
+      commissionPercent: response.data.commissionPercent || 20,
+      pricingRules: rules,
+    });
+  } catch (error) {
+    console.error("Error al obtener configuración de precios:", error.message);
   }
 };
 
@@ -110,9 +131,10 @@ const fetchDeliveries = async () => {
 };
 
 useEffect(() => {
+  fetchPricingConfig();
   if (isAuthenticated) {
     fetchDeliveries();
-    fetchUserProfile(); // Cargar perfil al inicio si está autenticado
+    fetchUserProfile();
   }
 }, [isAuthenticated]);
 
@@ -125,7 +147,7 @@ return (
     value={{
       serviceType, setServiceType, distance, setDistance, priceData, setPriceData, offer, setOffer, deliveries,
       token, user, isAuthenticated, login, register, logout, fetchUserProfile, 
-      createDelivery, fetchDeliveries,
+      createDelivery, fetchDeliveries, pricingConfig, fetchPricingConfig,
     }}
   >
     {children}

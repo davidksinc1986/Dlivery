@@ -14,6 +14,7 @@ router.post("/deliveries/:delivery_id/start", authMiddleware.verifyToken, driver
 router.post("/deliveries/:delivery_id/complete", authMiddleware.verifyToken, driverController.completeDelivery);
 
 // NUEVA RUTA: Obtener todas mis entregas como conductor
+router.get("/notifications", authMiddleware.verifyToken, driverController.getNotifications);
 router.get("/my-deliveries", authMiddleware.verifyToken, driverController.getMyDeliveries);
 
 module.exports = router;

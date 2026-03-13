@@ -6,7 +6,7 @@ import { useAppContext } from "../context/AppContext";
 import { calculatePrice } from "../services/pricing";
 import MapComponent from "../components/Map/MapComponent";
 import { io } from "socket.io-client";
-import { formatVehicleType, groupDeliveriesByVehicleType } from "../utils/deliveryUtils";
+import { formatVehicleType, groupDeliveriesByVehicleType, parseCoordinateString } from "../utils/deliveryUtils";
 import UserProfile from "../components/UserProfile"; // Importa el nuevo componente
 
 const SOCKET_SERVER_URL = "http://localhost:3001";
@@ -14,7 +14,7 @@ const SOCKET_SERVER_URL = "http://localhost:3001";
 export default function ClientDashboard() {
 const {
   serviceType, setServiceType, distance, setDistance, priceData, setPriceData,
-  offer, setOffer, deliveries, logout, user, createDelivery, fetchDeliveries, token
+  offer, setOffer, deliveries, logout, user, createDelivery, fetchDeliveries, token, pricingConfig
 } = useAppContext();
 
 // Estados para el formulario de creación de entrega
@@ -25,6 +25,7 @@ const [originCoords, setOriginCoords] = useState(null);
 const [destinationCoords, setDestinationCoords] = useState(null);
 const [deliveryError, setDeliveryError] = useState("");
 const [isCreatingDelivery, setIsCreatingDelivery] = useState(false);
+const [scheduledFor, setScheduledFor] = useState("");
 
 // Estados para el mapa de selección de origen/destino
 const [mapMarkers, setMapMarkers] = useState([]);
@@ -170,7 +171,7 @@ const handleCalculate = () => {
 
   setDistance(simulatedDistanceKm); 
 
-  const result = calculatePrice(serviceType, simulatedDistanceKm, true); 
+  const result = calculatePrice(serviceType, simulatedDistanceKm, pricingConfig.commissionPercent, pricingConfig.pricingRules); 
   setPriceData(result);
   setOffer(result.total); 
 };
@@ -204,7 +205,9 @@ const handleCreateDelivery = async () => {
       origin: `Lat: ${originCoords.lat.toFixed(4)}, Lng: ${originCoords.lng.toFixed(4)}`,
       destination: `Lat: ${destinationCoords.lat.toFixed(4)}, Lng: ${destinationCoords.lng.toFixed(4)}`,
       price_estimate: actualPriceToSend, 
-      vehicle_requested_type: serviceType, // Enviamos el tipo de vehículo solicitado
+      vehicle_requested_type: serviceType,
+      scheduled_for: scheduledFor || null,
+      request_mode: scheduledFor ? "scheduled" : "instant",
     });
     alert("¡Entrega creada con éxito!");
     fetchDeliveries(); // Recargar la lista completa después de crear
@@ -220,6 +223,7 @@ const handleCreateDelivery = async () => {
     setDistance(0);
     setPriceData(null);
     setOffer("");
+    setScheduledFor("");
   } catch (error) {
     setDeliveryError(error.message || "No se pudo crear la entrega.");
   } finally {
@@ -245,14 +249,14 @@ const trackingMapMarkers = [];
 let trackingMapCenter = [9.93, -84.08];
 
 if (deliveryBeingTracked) {
-    const originParts = deliveryBeingTracked.origin.split(', ').map(Number);
-    const destinationParts = deliveryBeingTracked.destination.split(', ').map(Number);
+    const originParts = parseCoordinateString(deliveryBeingTracked.origin);
+    const destinationParts = parseCoordinateString(deliveryBeingTracked.destination);
 
-    if (originParts.length === 2 && !isNaN(originParts[0]) && !isNaN(originParts[1])) {
+    if (originParts) {
         trackingMapMarkers.push({ position: [originParts[0], originParts[1]], popupText: `Origen: ${deliveryBeingTracked.description}` });
         trackingMapCenter = [originParts[0], originParts[1]];
     }
-    if (destinationParts.length === 2 && !isNaN(destinationParts[0]) && !isNaN(destinationParts[1])) {
+    if (destinationParts) {
         trackingMapMarkers.push({ position: [destinationParts[0], destinationParts[1]], popupText: `Destino: ${deliveryBeingTracked.description}` });
     }
 
@@ -328,11 +332,22 @@ return (
                 <MapComponent center={mapInitialCenter} onMapClick={handleMapClick} markers={mapMarkers} height="400px" />
             </div>
 
+            <div className="form-group">
+              <label htmlFor="scheduledFor">Programar viaje (opcional, sólo si quieres agendar):</label>
+              <input
+                id="scheduledFor"
+                type="datetime-local"
+                value={scheduledFor}
+                onChange={(e) => setScheduledFor(e.target.value)}
+              />
+              <p style={{marginTop:'6px', color:'#6c7891'}}>Si dejas vacío, se toma como viaje inmediato.</p>
+            </div>
+
             <h2>Seleccione Servicio</h2>
             <div className="services">
-              <ServiceCard title="Express Moto" type="moto" />
-              <ServiceCard title="Camión Liviano" type="camion_liviano" />
-              <ServiceCard title="Camión Pesado" type="camion_pesado" />
+              <ServiceCard type="moto" />
+              <ServiceCard type="camion_liviano" />
+              <ServiceCard type="camion_pesado" />
             </div>
 
             {serviceType && ( 
@@ -344,7 +359,8 @@ return (
 
             {priceData && ( 
               <div className="price-offer-section">
-                <h2>Precio Sugerido: ₡{priceData.total}</h2>
+                <h2>Precio estimado: ₡{priceData.total}</h2>
+                <p>Base: ₡{priceData.subtotal} · Express: ₡{priceData.expressFee} · Plataforma: ₡{priceData.serviceFee}</p>
 
                 <h3>Oferta del Cliente</h3>
                 <input
@@ -385,6 +401,15 @@ return (
                       {delivery.status === 'pending' || delivery.status === 'assigned' || delivery.status === 'in_progress' ? (
                         <p style={{fontWeight: 'bold', color: 'green'}}>PIN de Confirmación: {delivery.confirmation_pin}</p>
                       ) : null}
+                      {delivery.driver_id && (
+                        <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px'}}>
+                          <img src={delivery.driver_profile_picture || 'https://via.placeholder.com/42'} alt="driver" style={{width:'42px', height:'42px', borderRadius:'50%', objectFit:'cover'}} />
+                          <div>
+                            <p style={{margin:0, fontWeight:700}}>Conductor: {delivery.driver_first_name || 'Por asignar'} {delivery.driver_last_name || ''}</p>
+                            <p style={{margin:0}}>⭐ {delivery.driver_rating || 5}</p>
+                          </div>
+                        </div>
+                      )}
                       <p>Descripción: {delivery.description}</p>
                       <p>Origen: {delivery.origin}</p>
                       <p>Destino: {delivery.destination}</p>

@@ -2,7 +2,7 @@
 
 const pool = require("../db");
 const jwt = require("jsonwebtoken");
-const paymentController = require("./paymentController"); // Para la simulación de pago
+const { TEST_BYPASS_EMAILS } = require("../bootstrapDb");
 
 // Función para que un usuario se convierta en conductor (cambia su rol)
 exports.becomeDriver = async (req, res) => {
@@ -42,7 +42,8 @@ try {
 
   let updateFields = ["is_available = $1"];
   let params = [is_available];
-  let paramCounter = 2; // El siguiente parámetro en la consulta
+  let paramCounter = 2;
+  updateFields.push(`online_since = CASE WHEN $1 = TRUE THEN COALESCE(online_since, NOW()) ELSE NULL END`);
 
   if (is_available && latitude && longitude) {
       updateFields.push(`last_known_location = ST_SetSRID(ST_MakePoint($${paramCounter}, $${paramCounter + 1}), 4326)`);
@@ -86,7 +87,7 @@ try {
   const driverLocationWKT = driverStatusResult.rows[0].last_known_location_wkt;
   
   let query = `
-    SELECT d.*, u.first_name as client_first_name, u.last_name as client_last_name, u.email as client_email, s.name as service_name
+    SELECT d.*, u.first_name as client_first_name, u.last_name as client_last_name, u.email as client_email, u.profile_picture_url as client_profile_picture, u.rating as client_rating, s.name as service_name
   `;
   let queryParams = [];
   let paramCounter = 1;
@@ -207,44 +208,54 @@ try {
       return res.status(400).json({ error: "PIN de confirmación incorrecto." });
   }
 
+  const paymentResult = await pool.query(
+    `SELECT p.*, u.email as client_email
+     FROM payments p
+     JOIN users u ON u.id = p.user_id
+     WHERE p.delivery_id = $1
+     ORDER BY p.id DESC LIMIT 1`,
+    [delivery_id]
+  );
+
+  if (!paymentResult.rows.length) {
+    return res.status(400).json({ error: "No existe hold de pago para esta entrega." });
+  }
+
+  const payment = paymentResult.rows[0];
+  const bypass = TEST_BYPASS_EMAILS.includes(payment.client_email) || TEST_BYPASS_EMAILS.includes(req.user.email);
+
+  if (!bypass) {
+    if (payment.status === 'hold_released') {
+      return res.status(400).json({ error: "El hold expiró (24h). Debes reautorizar el pago antes de completar." });
+    }
+
+    if (payment.status !== 'authorization_hold') {
+      return res.status(400).json({ error: "El pago no está en estado de hold válido para captura." });
+    }
+
+    if (payment.hold_expires_at && new Date(payment.hold_expires_at) <= new Date()) {
+      await pool.query("UPDATE payments SET status = 'hold_released' WHERE id = $1", [payment.id]);
+      return res.status(400).json({ error: "El hold de pago expiró. No se capturó el cobro." });
+    }
+
+    await pool.query("UPDATE payments SET status = 'captured' WHERE id = $1", [payment.id]);
+    await pool.query("UPDATE deliveries SET payment_status = 'captured' WHERE id = $1", [delivery_id]);
+  } else {
+    await pool.query("UPDATE payments SET status = 'test_bypass' WHERE id = $1", [payment.id]);
+    await pool.query("UPDATE deliveries SET payment_status = 'test_bypass' WHERE id = $1", [delivery_id]);
+  }
+
   const result = await pool.query(
     `UPDATE deliveries SET status = 'completed'
      WHERE id = $1 RETURNING *`,
     [delivery_id]
   );
 
-  const paymentIntentId = `pi_auto_${delivery_id}_${Date.now()}`;
-  const simulatedWebhookEvent = {
-      id: `evt_simulated_${delivery_id}_${Date.now()}`,
-      object: "event",
-      type: "payment_intent.succeeded",
-      data: {
-          object: {
-              id: paymentIntentId,
-              object: "payment_intent",
-              amount: Math.round(delivery.price_estimate * 100),
-              currency: "usd",
-              status: "succeeded",
-              metadata: {
-                  delivery_id: delivery_id.toString(),
-                  user_id: delivery.user_id.toString()
-              }
-          }
-      }
-  };
-  
-  await paymentController.handleStripeWebhookSimulated(simulatedWebhookEvent);
-  
-  const fundsReleased = await paymentController.releaseFundsToDriver(delivery_id);
-  
-  if (!fundsReleased) {
-      console.warn(`No se pudieron liberar fondos para entrega ${delivery_id} automáticamente.`);
-  }
-
   res.status(200).json({
-    message: "Entrega completada exitosamente.",
+    message: bypass
+      ? "Entrega de prueba completada (modo bypass)."
+      : "Entrega completada y pago capturado. Liquidación al conductor queda pendiente para el lunes siguiente.",
     delivery: result.rows[0],
-    funds_released: fundsReleased,
     payment_processed: true
   });
 
@@ -254,13 +265,33 @@ try {
 }
 };
 
+
+// Notificaciones para conductor (viajes directos asignados por score)
+exports.getNotifications = async (req, res) => {
+try {
+  const driver_id = req.user.id;
+  const result = await pool.query(
+    `SELECT id, delivery_id, title, message, is_read, created_at
+     FROM driver_notifications
+     WHERE driver_id = $1
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    [driver_id]
+  );
+  res.status(200).json(result.rows);
+} catch (err) {
+  console.error("Error al obtener notificaciones del conductor:", err.message);
+  res.status(500).json({ error: "No se pudieron cargar notificaciones." });
+}
+};
+
 // Obtener todas las entregas asignadas o en curso para el conductor actual
 exports.getMyDeliveries = async (req, res) => {
 try {
   const driver_id = req.user.id;
 
   const result = await pool.query(
-    `SELECT d.*, u.first_name as client_first_name, u.last_name as client_last_name, u.email as client_email, s.name as service_name
+    `SELECT d.*, u.first_name as client_first_name, u.last_name as client_last_name, u.email as client_email, u.profile_picture_url as client_profile_picture, u.rating as client_rating, s.name as service_name
      FROM deliveries d
      JOIN users u ON d.user_id = u.id
      JOIN services s ON d.service_id = s.id
