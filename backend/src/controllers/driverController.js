@@ -49,8 +49,6 @@ try {
       updateFields.push(`last_known_location = ST_SetSRID(ST_MakePoint($${paramCounter}, $${paramCounter + 1}), 4326)`);
       params.push(longitude, latitude);
       paramCounter += 2;
-  } else {
-      updateFields.push(`last_known_location = NULL`);
   }
   
   params.push(driver_id); 
@@ -304,5 +302,86 @@ try {
 } catch (err) {
   console.error("Error al obtener las entregas de mi conductor:", err.message);
   res.status(500).json({ error: "Error interno del servidor al obtener tus entregas." });
+}
+};
+
+exports.declineDelivery = async (req, res) => {
+try {
+  const driver_id = req.user.id;
+  const { delivery_id } = req.params;
+
+  const deliveryResult = await pool.query(
+    `SELECT d.id, d.user_id, d.vehicle_requested_type, d.origin_location, d.status, d.driver_id
+     FROM deliveries d
+     WHERE d.id = $1`,
+    [delivery_id]
+  );
+
+  if (!deliveryResult.rows.length) {
+    return res.status(404).json({ error: "Entrega no encontrada." });
+  }
+
+  const delivery = deliveryResult.rows[0];
+  if (delivery.driver_id !== driver_id || delivery.status !== "assigned") {
+    return res.status(400).json({ error: "Solo puedes rechazar entregas asignadas a ti." });
+  }
+
+  await pool.query(
+    `INSERT INTO delivery_driver_declines(delivery_id, driver_id, reason)
+     VALUES($1, $2, $3)`,
+    [delivery_id, driver_id, req.body?.reason || null]
+  );
+
+  const nextDriver = await pool.query(
+    `SELECT u.id,
+            ((COALESCE(u.rating,5)/5.0)*0.5 +
+             LEAST((EXTRACT(EPOCH FROM (NOW() - COALESCE(u.online_since, NOW()))) / 60) / 60.0,1)*0.2 +
+             GREATEST(0, 1 - ((ST_Distance(u.last_known_location::geography, d.origin_location::geography) / 1000) / 10.0))*0.3
+            ) AS smart_score
+     FROM users u
+     JOIN deliveries d ON d.id = $1
+     WHERE u.role = 'driver'
+       AND u.id <> $2
+       AND u.is_available = TRUE
+       AND u.last_known_location IS NOT NULL
+       AND (d.vehicle_requested_type = ANY(u.vehicle_types))
+       AND u.id NOT IN (
+         SELECT driver_id FROM delivery_driver_declines WHERE delivery_id = $1
+       )
+     ORDER BY smart_score DESC, COALESCE(u.rating,5) DESC
+     LIMIT 1`,
+    [delivery_id, driver_id]
+  );
+
+  if (!nextDriver.rows.length) {
+    await pool.query(
+      `UPDATE deliveries SET driver_id = NULL, status = 'pending' WHERE id = $1`,
+      [delivery_id]
+    );
+    return res.status(200).json({
+      message: "Entrega rechazada. No hay otro conductor elegible por ahora; regresó al pool.",
+      reassigned: false,
+    });
+  }
+
+  await pool.query(
+    `UPDATE deliveries SET driver_id = $1, assigned_at = NOW(), status = 'assigned' WHERE id = $2`,
+    [nextDriver.rows[0].id, delivery_id]
+  );
+
+  await pool.query(
+    `INSERT INTO driver_notifications(driver_id, delivery_id, title, message)
+     VALUES($1, $2, 'Viaje reasignado', 'Se te asignó un viaje por rechazo del conductor anterior.')`,
+    [nextDriver.rows[0].id, delivery_id]
+  );
+
+  return res.status(200).json({
+    message: "Entrega rechazada y reasignada al siguiente conductor disponible por ranking.",
+    reassigned: true,
+    next_driver_id: nextDriver.rows[0].id,
+  });
+} catch (err) {
+  console.error("Error al rechazar entrega:", err.message);
+  res.status(500).json({ error: "Error interno del servidor al rechazar la entrega." });
 }
 };

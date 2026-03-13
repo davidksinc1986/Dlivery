@@ -1,5 +1,6 @@
 const pool = require("../db");
 const { TEST_BYPASS_EMAILS } = require("../bootstrapDb");
+const { buildSmartPlan } = require("../services/smartRoutingService");
 
 const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -34,6 +35,34 @@ const findBestDriver = async (client, originLng, originLat, vehicleType) => {
   );
   return result.rows[0] || null;
 };
+
+const findRankedDrivers = async (client, originLng, originLat, vehicleType, limit = 5, companyPriority = false) => {
+  const result = await client.query(
+    `SELECT id,
+            first_name,
+            last_name,
+            COALESCE(rating, 5) as rating,
+            EXTRACT(EPOCH FROM (NOW() - COALESCE(online_since, NOW()))) / 60 AS waiting_minutes,
+            ST_Distance(last_known_location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000 AS distance_km,
+            ((COALESCE(rating,5)/5.0)*0.45 +
+              LEAST((EXTRACT(EPOCH FROM (NOW() - COALESCE(online_since, NOW()))) / 60) / 60.0,1)*0.35 +
+              GREATEST(0, 1 - ((ST_Distance(last_known_location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000) / 10.0))*0.20 +
+              CASE WHEN $5 = TRUE THEN 0.08 ELSE 0 END
+            ) AS smart_score
+     FROM users
+     WHERE role='driver'
+       AND is_available = TRUE
+       AND last_known_location IS NOT NULL
+       AND ($3 = ANY(vehicle_types))
+     ORDER BY smart_score DESC, COALESCE(rating,5) DESC
+     LIMIT $4`,
+    [originLng, originLat, vehicleType, limit, companyPriority]
+  );
+
+  return result.rows;
+};
+
+exports.findRankedDrivers = findRankedDrivers;
 
 exports.createDelivery = async (req, res) => {
   try {
@@ -176,5 +205,71 @@ exports.getUserDeliveries = async (req, res) => {
   } catch (err) {
     console.error("Error al obtener entregas del usuario:", err.message);
     res.status(500).json({ error: "Error interno del servidor al obtener entregas." });
+  }
+};
+
+exports.createSmartDeliveryPlan = async (req, res) => {
+  try {
+    const {
+      start_point,
+      end_point,
+      packages,
+      max_deviation_km = 3,
+      company_name,
+      monthly_priority_active,
+    } = req.body;
+
+    if (!start_point?.lat || !start_point?.lng || !end_point?.lat || !end_point?.lng) {
+      return res.status(400).json({ error: "Debes enviar start_point y end_point con lat/lng." });
+    }
+
+    if (!Array.isArray(packages) || !packages.length) {
+      return res.status(400).json({ error: "Debes enviar al menos un paquete para planificar rutas." });
+    }
+
+    const startPoint = { lat: Number(start_point.lat), lng: Number(start_point.lng), address: start_point.address || null };
+    const endPoint = { lat: Number(end_point.lat), lng: Number(end_point.lng), address: end_point.address || null };
+
+    const plan = buildSmartPlan({
+      startPoint,
+      endPoint,
+      packages,
+      maxDeviationKm: Number(max_deviation_km) || 3,
+    });
+
+    const connection = await pool.connect();
+    try {
+      for (const route of plan.routes) {
+        if (!route.stops.length) continue;
+        const firstStop = route.stops[0];
+        route.driver_candidates = await findRankedDrivers(
+          connection,
+          firstStop.lng,
+          firstStop.lat,
+          route.vehicle_type,
+          5,
+          Boolean(monthly_priority_active)
+        );
+      }
+
+      const savedPlan = await connection.query(
+        `INSERT INTO smart_route_plans(user_id, company_name, monthly_priority_active, payload)
+         VALUES($1, $2, $3, $4::jsonb)
+         RETURNING id, created_at`,
+        [req.user.id, company_name || null, Boolean(monthly_priority_active), JSON.stringify(plan)]
+      );
+
+      return res.status(201).json({
+        message: "Plan inteligente generado con rutas, círculos de 3km y ranking de conductores.",
+        plan_id: savedPlan.rows[0].id,
+        created_at: savedPlan.rows[0].created_at,
+        plan,
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (err) {
+    console.error("Error generando plan inteligente:", err.message);
+    return res.status(500).json({ error: "No se pudo generar el plan inteligente de rutas." });
   }
 };

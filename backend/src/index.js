@@ -127,6 +127,23 @@ io.on("connection", (socket) => {
         [driver_id, delivery_id, latitude, longitude]
       );
 
+      await pool.query(
+        `UPDATE users
+         SET last_known_location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
+             online_since = COALESCE(online_since, NOW())
+         WHERE id = $3`,
+        [longitude, latitude, driver_id]
+      );
+
+      socket.data.driver_id = driver_id;
+      io.emit("admin_driver_location_update", {
+        driver_id,
+        latitude,
+        longitude,
+        timestamp: new Date().toISOString(),
+        is_available: true,
+      });
+
       io.to(`delivery_${delivery_id}`).emit("update_location", {
         delivery_id,
         driver_id,
@@ -184,6 +201,13 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    if (socket.data?.driver_id) {
+      io.emit("admin_driver_connection_change", {
+        driver_id: socket.data.driver_id,
+        is_available: false,
+        disconnected_at: new Date().toISOString(),
+      });
+    }
     console.log(`Usuario desconectado de WebSocket: ${socket.id}`);
   });
 });

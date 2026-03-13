@@ -52,3 +52,16 @@ npm install
 npm run dev
 ```
 
+
+
+## Nuevo: planificador inteligente de rutas por empresa
+
+Se agregó un flujo para clientes corporativos con prioridad mensual:
+
+- Endpoint: `POST /deliveries/smart-plan` (requiere JWT).
+- Recibe hasta 200 paquetes con coordenadas y tipo de vehículo.
+- Genera rutas óptimas desde punto inicial a punto final con desviación máxima configurable (default 3km por paquete).
+- Devuelve círculos y polilíneas para visualizar/configurar en mapa por un admin.
+- Incluye ranking de conductores por disponibilidad + cercanía + rating.
+- Si un conductor rechaza un viaje asignado: `POST /drivers/deliveries/:delivery_id/decline` reasigna al siguiente conductor elegible por ranking; si no hay candidato vuelve al pool.
+- Admin/Super Admin puede monitorear conductores activos en mapa con `GET /admin/drivers/live-locations`; mientras estén activos se actualiza su posición y, al desconectarse, queda guardada su última ubicación conocida.
