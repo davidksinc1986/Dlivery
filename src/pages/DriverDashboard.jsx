@@ -5,13 +5,13 @@ import { useAppContext } from '../context/AppContext';
 import api from '../api/axios';
 import MapComponent from "../components/Map/MapComponent";
 import { io } from "socket.io-client";
-import { formatVehicleType, groupDeliveriesByVehicleType } from "../utils/deliveryUtils";
+import { formatVehicleType, groupDeliveriesByVehicleType, parseCoordinateString, toMapsQuery } from "../utils/deliveryUtils";
 import UserProfile from "../components/UserProfile"; // <--- Importado UserProfile
 
 const SOCKET_SERVER_URL = "http://localhost:3001";
 
 export default function DriverDashboard() {
-const { logout, user, token, fetchUserProfile } = useAppContext(); // <--- Añadido fetchUserProfile del contexto
+const { logout, user, token } = useAppContext();
 const [isDriverAvailable, setIsDriverAvailable] = useState(!!user?.is_available);
 const [availableDeliveries, setAvailableDeliveries] = useState([]); // Todas las disponibles del pool
 const [assignedDeliveries, setAssignedDeliveries] = useState([]); // Aceptadas pero no iniciadas
@@ -19,6 +19,7 @@ const [inProgressDeliveries, setInProgressDeliveries] = useState([]); // Iniciad
 const [driverError, setDriverError] = useState("");
 const [pinInput, setPinInput] = useState("");
 const [totalEarnings, setTotalEarnings] = useState(0);
+const [notifications, setNotifications] = useState([]);
 
 const socketRef = useRef(null);
 const currentDeliveryIntervalIdRef = useRef(null);
@@ -141,6 +142,15 @@ const fetchEarnings = useCallback(async (period = 'total') => { // <--- useCallb
   }
 }, [api]); // Depende de 'api'
 
+const fetchNotifications = useCallback(async () => {
+  try {
+    const response = await api.get('/drivers/notifications');
+    setNotifications(response.data || []);
+  } catch (error) {
+    console.error('Error al cargar notificaciones', error.message);
+  }
+}, []);
+
 // Función para alternar la disponibilidad (Online/Offline)
 const toggleAvailability = useCallback(async () => { // <--- useCallback
   setDriverError("");
@@ -194,8 +204,9 @@ useEffect(() => {
     setIsDriverAvailable(!!user.is_available);
     fetchMyDeliveries();
     fetchEarnings(); // Cargar ganancias al inicio
+    fetchNotifications();
   }
-}, [user, fetchMyDeliveries, fetchEarnings]); // Dependencias para el efecto
+}, [user, fetchMyDeliveries, fetchEarnings, fetchNotifications]);
 
 // Efecto para cargar entregas disponibles (pool)
 useEffect(() => {
@@ -277,16 +288,16 @@ const mapMarkers = [];
 let mapCenter = [9.93, -84.08];
 
 if (activeDeliveryForMap) {
-    const originParts = activeDeliveryForMap.origin.split(', ').map(Number);
-    const destinationParts = activeDeliveryForMap.destination.split(', ').map(Number);
+    const originParts = parseCoordinateString(activeDeliveryForMap.origin);
+    const destinationParts = parseCoordinateString(activeDeliveryForMap.destination);
 
-    if (originParts.length === 2 && !isNaN(originParts[0]) && !isNaN(originParts[1])) {
+    if (originParts) {
         mapMarkers.push({ position: [originParts[0], originParts[1]], popupText: `Origen: ${activeDeliveryForMap.description}` });
         mapCenter = [originParts[0], originParts[1]];
     }
-    if (destinationParts.length === 2 && !isNaN(destinationParts[0]) && !isNaN(destinationParts[1])) {
+    if (destinationParts) {
         mapMarkers.push({ position: [destinationParts[0], destinationParts[1]], popupText: `Destino: ${activeDeliveryForMap.description}` });
-        if (!originParts.length) mapCenter = [destinationParts[0], destinationParts[1]];
+        if (!originParts) mapCenter = [destinationParts[0], destinationParts[1]];
     }
 }
 
@@ -323,6 +334,17 @@ return (
       <UserProfile onClose={() => setShowProfile(false)} />
     ) : (
       <> {/* Contenido principal si no se muestra el perfil */}
+        <div className="driver-controls-section">
+          <h2>Notificaciones Prioritarias</h2>
+          {notifications.length === 0 ? <p>Sin notificaciones nuevas.</p> : notifications.slice(0,5).map((n) => (
+            <div key={n.id} className="delivery-card" style={{marginBottom:'8px'}}>
+              <p style={{fontWeight:700, marginBottom:4}}>{n.title}</p>
+              <p>{n.message}</p>
+            </div>
+          ))}
+        </div>
+
+
         <div className="driver-controls-section">
           <h2>Mi Disponibilidad</h2>
           <button onClick={toggleAvailability} className={`primary-button ${isDriverAvailable ? 'available' : 'unavailable'}`}>
@@ -419,14 +441,14 @@ return (
                               {/* BOTONES DE MAPS */}
                               <div style={{marginTop: '10px', marginBottom: '10px'}}>
                                 <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.origin}`, '_blank')} 
+                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.origin)}`, '_blank')} 
                                   className="primary-button small-button" 
                                   style={{marginRight: '5px'}}
                                 >
                                   Origen en Maps
                                 </button>
                                 <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.destination}`, '_blank')} 
+                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.destination)}`, '_blank')} 
                                   className="primary-button small-button"
                                 >
                                   Destino en Maps
@@ -462,14 +484,14 @@ return (
                               {/* BOTONES DE MAPS */}
                               <div style={{marginTop: '10px', marginBottom: '10px'}}>
                                 <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.origin}`, '_blank')} 
+                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.origin)}`, '_blank')} 
                                   className="primary-button small-button" 
                                   style={{marginRight: '5px'}}
                                 >
                                   Origen en Maps
                                 </button>
                                 <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.destination}`, '_blank')} 
+                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.destination)}`, '_blank')} 
                                   className="primary-button small-button"
                                 >
                                   Destino en Maps
