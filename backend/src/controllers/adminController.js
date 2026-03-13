@@ -119,3 +119,54 @@ exports.markPayoutAsPaid = async (req, res) => {
 
   res.json({ message: "Pago semanal registrado.", payment: result.rows[0] });
 };
+
+
+exports.getSmartRoutePlans = async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const result = await pool.query(
+      `SELECT srp.id, srp.user_id, srp.company_name, srp.monthly_priority_active, srp.payload, srp.created_at,
+              u.first_name, u.last_name, u.email
+       FROM smart_route_plans srp
+       LEFT JOIN users u ON u.id = srp.user_id
+       ORDER BY srp.created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "No se pudieron cargar los planes inteligentes." });
+  }
+};
+
+
+exports.getDriverLocationsLive = async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT u.id,
+              u.first_name,
+              u.last_name,
+              u.email,
+              u.is_available,
+              u.online_since,
+              u.rating,
+              u.rating_count,
+              ST_Y(u.last_known_location::geometry) AS lat,
+              ST_X(u.last_known_location::geometry) AS lng,
+              (SELECT dl.timestamp
+               FROM driver_locations dl
+               WHERE dl.driver_id = u.id
+               ORDER BY dl.timestamp DESC
+               LIMIT 1) AS last_location_at
+       FROM users u
+       WHERE u.role = 'driver'
+         AND u.last_known_location IS NOT NULL
+       ORDER BY u.is_available DESC, COALESCE(u.online_since, u.created_at) DESC`
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "No se pudieron cargar las ubicaciones de conductores." });
+  }
+};

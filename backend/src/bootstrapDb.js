@@ -47,6 +47,30 @@ const setupSchema = async () => {
     );
   `);
 
+
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS delivery_driver_declines (
+      id SERIAL PRIMARY KEY,
+      delivery_id INTEGER REFERENCES deliveries(id),
+      driver_id INTEGER REFERENCES users(id),
+      reason TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(delivery_id, driver_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS smart_route_plans (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      company_name TEXT,
+      monthly_priority_active BOOLEAN DEFAULT FALSE,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,

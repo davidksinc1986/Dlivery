@@ -9,5 +9,6 @@ router.post("/", authMiddleware.verifyToken, deliveryController.createDelivery);
 
 // Ruta GET /deliveries - Para obtener todas las entregas del usuario autenticado (protegida)
 router.get("/", authMiddleware.verifyToken, deliveryController.getUserDeliveries);
+router.post("/smart-plan", authMiddleware.verifyToken, deliveryController.createSmartDeliveryPlan);
 
 module.exports = router;

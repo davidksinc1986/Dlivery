@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
 import { useAppContext } from "../context/AppContext";
+import MapComponent from "../components/Map/MapComponent";
+
+const defaultPackagesJson = JSON.stringify([
+  { id: "pkg-1", label: "Sabana -> Alajuela #1", lat: 9.9963, lng: -84.2111, vehicle_type: "moto", load_type: "ligero" },
+  { id: "pkg-2", label: "Sabana -> Alajuela #2", lat: 10.0103, lng: -84.214, vehicle_type: "moto", load_type: "ligero" },
+  { id: "pkg-3", label: "Carga camión", lat: 9.9802, lng: -84.19, vehicle_type: "camion_liviano", load_type: "camion" }
+], null, 2);
 
 export default function AdminDashboard() {
   const { user, logout } = useAppContext();
@@ -10,13 +17,25 @@ export default function AdminDashboard() {
   const [pricing, setPricing] = useState([]);
   const [commissionPercent, setCommissionPercent] = useState(20);
   const [receiptNotes, setReceiptNotes] = useState({});
+  const [smartPlans, setSmartPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [liveDrivers, setLiveDrivers] = useState([]);
+  const [plannerForm, setPlannerForm] = useState({
+    company_name: "",
+    monthly_priority_active: true,
+    max_deviation_km: 3,
+    start_point: { lat: 9.9358, lng: -84.0994, address: "Sabana" },
+    end_point: { lat: 10.0162, lng: -84.2116, address: "Alajuela" },
+    packages_json: defaultPackagesJson,
+  });
 
   const loadAll = async () => {
-    const [ov, us, py, pr] = await Promise.all([
+    const [ov, us, py, pr, sr] = await Promise.all([
       api.get("/admin/overview"),
       api.get("/admin/users"),
       api.get("/admin/payouts"),
       api.get("/admin/pricing"),
+      api.get("/admin/smart-routes"),
     ]);
 
     setOverview(ov.data);
@@ -24,10 +43,26 @@ export default function AdminDashboard() {
     setPayouts(py.data);
     setPricing(pr.data.pricing);
     setCommissionPercent(pr.data.commissionPercent);
+    setSmartPlans(sr.data);
+    if (!selectedPlan && sr.data.length) setSelectedPlan(sr.data[0]);
+  };
+
+  const loadLiveDriverLocations = async () => {
+    const response = await api.get("/admin/drivers/live-locations");
+    setLiveDrivers(response.data);
   };
 
   useEffect(() => {
     loadAll();
+    loadLiveDriverLocations();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadLiveDriverLocations();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const updatePricing = async () => {
@@ -43,6 +78,76 @@ export default function AdminDashboard() {
     await loadAll();
   };
 
+  const createSmartPlan = async () => {
+    try {
+      const packages = JSON.parse(plannerForm.packages_json);
+      const response = await api.post("/deliveries/smart-plan", {
+        company_name: plannerForm.company_name,
+        monthly_priority_active: plannerForm.monthly_priority_active,
+        max_deviation_km: Number(plannerForm.max_deviation_km),
+        start_point: plannerForm.start_point,
+        end_point: plannerForm.end_point,
+        packages,
+      });
+      alert("Plan inteligente generado.");
+      await loadAll();
+      setSelectedPlan({
+        id: response.data.plan_id,
+        company_name: plannerForm.company_name,
+        payload: response.data.plan,
+      });
+    } catch (error) {
+      alert(error?.response?.data?.error || "No se pudo generar el plan inteligente.");
+    }
+  };
+
+  const mapData = useMemo(() => {
+    const payload = selectedPlan?.payload;
+    if (!payload?.routes?.length) return { markers: [], circles: [], polylines: [] };
+
+    const markers = [];
+    const circles = [];
+    const polylines = [];
+
+    payload.routes.forEach((route) => {
+      markers.push({ position: [route.origin.lat, route.origin.lng], popupText: `Origen · ${route.vehicle_type}` });
+      markers.push({ position: [route.destination.lat, route.destination.lng], popupText: `Destino · ${route.vehicle_type}` });
+      route.stops.forEach((stop) => {
+        markers.push({
+          position: [stop.lat, stop.lng],
+          popupText: `${stop.stop_order}. ${stop.label} (${stop.deviation_km}km)`
+        });
+      });
+      route.circles.forEach((circle) => {
+        circles.push({
+          center: circle.center,
+          radius: circle.radius_m,
+          popupText: `${circle.package_id} · radio ${circle.radius_m / 1000}km`,
+          color: "#457b9d",
+          fillOpacity: 0.15,
+        });
+      });
+      polylines.push({
+        positions: route.polyline,
+        color: "#e76f51",
+        popupText: `${route.route_id} · ${route.total_packages} paquetes`
+      });
+    });
+
+    return { markers, circles, polylines };
+  }, [selectedPlan]);
+
+  const liveDriverMarkers = useMemo(() => {
+    return liveDrivers
+      .filter((driver) => Number.isFinite(Number(driver.lat)) && Number.isFinite(Number(driver.lng)))
+      .map((driver) => ({
+        position: [Number(driver.lat), Number(driver.lng)],
+        popupText: `${driver.first_name} ${driver.last_name} · ${driver.is_available ? "Activo" : "Desconectado"} · última señal: ${driver.last_location_at ? String(driver.last_location_at).replace("T", " ").slice(0, 19) : "N/D"}`,
+      }));
+  }, [liveDrivers]);
+
+  const liveMapCenter = liveDriverMarkers[0]?.position || [9.93, -84.08];
+
   return (
     <div className="container">
       <header className="app-header">
@@ -52,6 +157,90 @@ export default function AdminDashboard() {
           <button onClick={logout} className="logout-button">Cerrar sesión</button>
         </div>
       </header>
+
+
+      <div className="delivery-list-section">
+        <h2>Monitoreo de conductores en vivo (emergencias)</h2>
+        <p style={{ color: "#6c7891", marginBottom: 10 }}>
+          Este mapa se actualiza cada 5 segundos. Si un conductor se desconecta, se mantiene su última ubicación conocida.
+        </p>
+        <MapComponent
+          center={liveMapCenter}
+          markers={liveDriverMarkers}
+          height="360px"
+        />
+        <div className="deliveries-grid" style={{ marginTop: 12 }}>
+          {liveDrivers.slice(0, 20).map((driver) => (
+            <div key={`live-${driver.id}`} className="delivery-card">
+              <h3>{driver.first_name} {driver.last_name}</h3>
+              <p>{driver.email}</p>
+              <p>Estado: {driver.is_available ? "Activo" : "Desconectado"}</p>
+              <p>Última ubicación: {driver.lat && driver.lng ? `${Number(driver.lat).toFixed(5)}, ${Number(driver.lng).toFixed(5)}` : "No disponible"}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="create-delivery-section">
+        <h2>Planificador inteligente de rutas (prioridad mensual)</h2>
+        <div className="form-group">
+          <label>Empresa</label>
+          <input value={plannerForm.company_name} onChange={(e) => setPlannerForm((prev) => ({ ...prev, company_name: e.target.value }))} placeholder="Empresa X" />
+        </div>
+        <div className="deliveries-grid">
+          <div className="form-group">
+            <label>Inicio (lat,lng)</label>
+            <input value={plannerForm.start_point.lat} onChange={(e) => setPlannerForm((prev) => ({ ...prev, start_point: { ...prev.start_point, lat: Number(e.target.value) } }))} type="number" />
+            <input value={plannerForm.start_point.lng} onChange={(e) => setPlannerForm((prev) => ({ ...prev, start_point: { ...prev.start_point, lng: Number(e.target.value) } }))} type="number" />
+          </div>
+          <div className="form-group">
+            <label>Fin (lat,lng)</label>
+            <input value={plannerForm.end_point.lat} onChange={(e) => setPlannerForm((prev) => ({ ...prev, end_point: { ...prev.end_point, lat: Number(e.target.value) } }))} type="number" />
+            <input value={plannerForm.end_point.lng} onChange={(e) => setPlannerForm((prev) => ({ ...prev, end_point: { ...prev.end_point, lng: Number(e.target.value) } }))} type="number" />
+          </div>
+          <div className="form-group">
+            <label>Desviación máxima (km)</label>
+            <input type="number" value={plannerForm.max_deviation_km} onChange={(e) => setPlannerForm((prev) => ({ ...prev, max_deviation_km: Number(e.target.value) }))} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Paquetes JSON (hasta 200)</label>
+          <textarea rows={8} value={plannerForm.packages_json} onChange={(e) => setPlannerForm((prev) => ({ ...prev, packages_json: e.target.value }))} />
+        </div>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+          <input type="checkbox" checked={plannerForm.monthly_priority_active} onChange={(e) => setPlannerForm((prev) => ({ ...prev, monthly_priority_active: e.target.checked }))} />
+          Empresa con prioridad mensual activa
+        </label>
+        <button className="primary-button" onClick={createSmartPlan}>Generar rutas inteligentes</button>
+
+        {selectedPlan?.payload && (
+          <div style={{ marginTop: 20 }}>
+            <h3>Mapa de rutas con círculos configurables</h3>
+            <MapComponent
+              center={[plannerForm.start_point.lat, plannerForm.start_point.lng]}
+              markers={mapData.markers}
+              circles={mapData.circles}
+              polylines={mapData.polylines}
+              height="420px"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="delivery-list-section">
+        <h2>Planes inteligentes guardados</h2>
+        <div className="deliveries-grid">
+          {smartPlans.map((plan) => (
+            <div key={plan.id} className="delivery-card">
+              <h3>Plan #{plan.id} · {plan.company_name || "Sin empresa"}</h3>
+              <p>Prioridad mensual: {plan.monthly_priority_active ? "Activa" : "No"}</p>
+              <p>Paquetes: {plan.payload?.summary?.planned_packages || 0}</p>
+              <p>Rutas: {plan.payload?.summary?.routes_created || 0}</p>
+              <button className="primary-button" onClick={() => setSelectedPlan(plan)}>Ver en mapa</button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="delivery-list-section">
         <h2>KPIs Globales</h2>
