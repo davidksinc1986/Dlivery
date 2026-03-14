@@ -4,7 +4,7 @@ import { formatVehicleType } from "../utils/deliveryUtils";
 
 const testimonials = [
   {
-    quote: "Con Dlivery redujimos retrasos un 35% en solo dos semanas.",
+    quote: "Con Dlivery reducimos retrasos un 35% en solo dos semanas.",
     author: "Paula R.",
     role: "E-commerce Manager",
   },
@@ -53,7 +53,7 @@ export default function Auth() {
 
     if (!isRegistering) {
       const success = await login(email, password);
-      if (!success) setAuthError("Email o contraseña incorrectos.");
+      if (!success) setAuthError("No se pudo iniciar sesión. Verifica tu correo, contraseña o la conexión al servidor.");
       return;
     }
 
@@ -91,26 +91,39 @@ export default function Auth() {
   return (
     <div className="container auth-container">
       <section className="auth-showcase">
-        <p className="auth-badge">Temporada Smart Delivery</p>
-        <h2>Entrega moderna, visual y eficiente para tu operación diaria</h2>
-        <p className="auth-showcase-text">
-          Activa rutas más inteligentes, asigna conductores en segundos y mantén a tus clientes informados en cada kilómetro.
-        </p>
+        <div className="auth-showcase-header">
+          <p className="auth-badge">San Carlos en Línea · Delivery</p>
+          <h2>Movilidad inteligente para comercios y clientes de San Carlos</h2>
+          <p className="auth-showcase-text">
+            Centraliza pedidos, asigna repartidores y monitorea cada entrega en tiempo real con una experiencia clara, rápida y segura.
+          </p>
+        </div>
+
+        <div className="auth-kpi-strip" aria-hidden="true">
+          <article>
+            <strong>+1.2K</strong>
+            <span>entregas/mes</span>
+          </article>
+          <article>
+            <strong>98%</strong>
+            <span>entregas a tiempo</span>
+          </article>
+          <article>
+            <strong>24/7</strong>
+            <span>soporte activo</span>
+          </article>
+        </div>
 
         <div className="auth-hero-cards" aria-hidden="true">
           <div className="auth-image auth-image-main" />
           <div className="auth-mini-stats">
             <article>
-              <strong>+1.2K</strong>
-              <span>entregas/mes</span>
+              <h3>Ruta en vivo</h3>
+              <p>Ubicación actualizada minuto a minuto para clientes y operadores.</p>
             </article>
             <article>
-              <strong>4.9/5</strong>
-              <span>satisfacción</span>
-            </article>
-            <article>
-              <strong>24/7</strong>
-              <span>soporte activo</span>
+              <h3>Control operativo</h3>
+              <p>Tablero con entregas, choferes y métricas en una sola vista.</p>
             </article>
           </div>
         </div>
@@ -129,7 +142,9 @@ export default function Auth() {
       </section>
 
       <section className="auth-form-panel">
-        <h1>{isRegistering ? "Registro reforzado" : "Inicio de sesión"}</h1>
+        <p className="auth-form-eyebrow">Acceso plataforma</p>
+        <h1>{isRegistering ? "Registro de usuario" : "Inicio de sesión"}</h1>
+        <p className="auth-form-help">Usa tus credenciales para entrar al panel operativo.</p>
         {authError && <p className="error-message">{authError}</p>}
         <form onSubmit={onSubmit}>
           {isRegistering && (
