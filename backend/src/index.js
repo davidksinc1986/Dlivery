@@ -30,7 +30,7 @@ const io = new Server(server, {
 });
 
 app.use(cors({
-    origin: 'http://localhost:3000', // Permite solicitudes desde tu frontend React
+    origin: process.env.FRONTEND_ORIGIN || true,
     credentials: true
 }));
 

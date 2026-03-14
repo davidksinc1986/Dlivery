@@ -2,6 +2,19 @@ import { useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import { formatVehicleType } from "../utils/deliveryUtils";
 
+const testimonials = [
+  {
+    quote: "Con Dlivery redujimos retrasos un 35% en solo dos semanas.",
+    author: "Paula R.",
+    role: "E-commerce Manager",
+  },
+  {
+    quote: "Me encanta el seguimiento en tiempo real y lo fácil que es coordinar rutas.",
+    author: "Carlos M.",
+    role: "Operaciones Logísticas",
+  },
+];
+
 export default function Auth() {
   const { login, register } = useAppContext();
   const [isRegistering, setIsRegistering] = useState(false);
@@ -78,17 +91,40 @@ export default function Auth() {
   return (
     <div className="container auth-container">
       <section className="auth-showcase">
-        <p className="auth-badge">Logística confiable 24/7</p>
-        <h2>Entregas express para cada tipo de carga</h2>
+        <p className="auth-badge">Temporada Smart Delivery</p>
+        <h2>Entrega moderna, visual y eficiente para tu operación diaria</h2>
         <p className="auth-showcase-text">
-          Coordina tus envíos urbanos y empresariales con conductores verificados, seguimiento en vivo
-          y tiempos de respuesta rápidos.
+          Activa rutas más inteligentes, asigna conductores en segundos y mantén a tus clientes informados en cada kilómetro.
         </p>
-        <div className="auth-image-grid" aria-hidden="true">
-          <div className="auth-image auth-image-express" />
-          <div className="auth-image auth-image-truck" />
-          <div className="auth-image auth-image-moto" />
-          <div className="auth-image auth-image-light" />
+
+        <div className="auth-hero-cards" aria-hidden="true">
+          <div className="auth-image auth-image-main" />
+          <div className="auth-mini-stats">
+            <article>
+              <strong>+1.2K</strong>
+              <span>entregas/mes</span>
+            </article>
+            <article>
+              <strong>4.9/5</strong>
+              <span>satisfacción</span>
+            </article>
+            <article>
+              <strong>24/7</strong>
+              <span>soporte activo</span>
+            </article>
+          </div>
+        </div>
+
+        <div className="auth-testimonials" aria-label="Recomendaciones de clientes">
+          {testimonials.map((item) => (
+            <blockquote key={item.author} className="testimonial-card">
+              <p>“{item.quote}”</p>
+              <footer>
+                <strong>{item.author}</strong>
+                <span>{item.role}</span>
+              </footer>
+            </blockquote>
+          ))}
         </div>
       </section>
 

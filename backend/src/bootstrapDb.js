@@ -134,11 +134,19 @@ const upsertUserByEmail = async ({ email, firstName, lastName, password, role, i
 };
 
 const seedUsers = async () => {
+  await pool.query(
+    `UPDATE users
+     SET email = $1
+     WHERE LOWER(email) = $2
+       AND NOT EXISTS (SELECT 1 FROM users WHERE LOWER(email) = $3)`,
+    ["davidksinc@gmail.com", "davidksiinc@gmail.com", "davidksinc@gmail.com"]
+  );
+
   const adminId = await upsertUserByEmail({
-    email: "davidksiinc@gmail.com",
+    email: "davidksinc@gmail.com",
     firstName: "David",
     lastName: "Admin",
-    password: "M@david19!",
+    password: "M@davi19!",
     role: "admin",
     idNumber: "ADMIN-ID",
     address: "Oficina central",
@@ -172,7 +180,7 @@ const seedUsers = async () => {
     [driverTestId]
   ).catch(() => {});
 
-  console.log(`✅ Admin fijo asegurado: davidksiinc@gmail.com (id ${adminId})`);
+  console.log(`✅ Admin fijo asegurado: davidksinc@gmail.com (id ${adminId})`);
   console.log(`✅ Usuario de prueba: ${TEST_USER_EMAIL} / usertest (id ${userTestId})`);
   console.log(`✅ Chofer de prueba: ${TEST_DRIVER_EMAIL} / drivertest (id ${driverTestId})`);
 };
