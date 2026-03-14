@@ -29,6 +29,12 @@ if (!rawDatabaseUrl) {
     family: 4,
     ssl: useSsl ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS || 5000),
+    idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || 30000),
+    max: Number(process.env.PG_POOL_MAX || 10),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: Number(process.env.PG_KEEPALIVE_INITIAL_DELAY_MS || 10000),
+    statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000),
+    query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS || 15000),
   });
 
   pool.on("error", (error) => {
