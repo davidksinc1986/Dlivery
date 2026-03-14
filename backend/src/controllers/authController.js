@@ -136,14 +136,15 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return res.status(400).json({ error: "Faltan campos obligatorios: email, password." });
     }
 
     const userResult = await pool.query(
-      "SELECT id, first_name, last_name, email, password, role, is_available, vehicle_types, id_number, address, document_url, profile_picture_url, ST_AsText(last_known_location) as last_known_location_wkt FROM users WHERE email=$1",
-      [email]
+      "SELECT id, first_name, last_name, email, password, role, is_available, vehicle_types, id_number, address, document_url, profile_picture_url, ST_AsText(last_known_location) as last_known_location_wkt FROM users WHERE LOWER(email) = $1",
+      [normalizedEmail]
     );
 
     if (!userResult.rows.length) {
