@@ -59,7 +59,7 @@ button {
 .form-group { margin-bottom: 12px; }
 label { display: block; font-weight: 600; margin-bottom: 6px; }
 
-input, select {
+input, select, textarea {
   width: 100%;
   border: 1px solid #d7dff0;
   border-radius: 10px;
@@ -388,6 +388,80 @@ input, select {
   }
 
   .auth-hero-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.admin-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.admin-inline-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.admin-pricing-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.inline-check input {
+  width: auto;
+}
+
+.config-description {
+  margin-top: -2px;
+  color: var(--muted);
+}
+
+.map-block {
+  margin-top: 18px;
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(140deg, #ffffff, #f7fbff);
+  border: 1px solid #dce9ff;
+}
+
+.create-delivery-section,
+.delivery-list-section,
+.assigned-deliveries-section {
+  transition: transform .3s ease, box-shadow .3s ease;
+}
+
+.create-delivery-section:hover,
+.delivery-list-section:hover,
+.assigned-deliveries-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 30px rgba(24, 39, 75, 0.12);
+}
+
+@media (max-width: 820px) {
+  .admin-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-inline-inputs {
     grid-template-columns: 1fr;
   }
 }

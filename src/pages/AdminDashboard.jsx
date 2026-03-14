@@ -6,7 +6,7 @@ import MapComponent from "../components/Map/MapComponent";
 const defaultPackagesJson = JSON.stringify([
   { id: "pkg-1", label: "Sabana -> Alajuela #1", lat: 9.9963, lng: -84.2111, vehicle_type: "moto", load_type: "ligero" },
   { id: "pkg-2", label: "Sabana -> Alajuela #2", lat: 10.0103, lng: -84.214, vehicle_type: "moto", load_type: "ligero" },
-  { id: "pkg-3", label: "Carga camión", lat: 9.9802, lng: -84.19, vehicle_type: "camion_liviano", load_type: "camion" }
+  { id: "pkg-3", label: "Carga camión", lat: 9.9802, lng: -84.19, vehicle_type: "camion_liviano", load_type: "camion" },
 ], null, 2);
 
 export default function AdminDashboard() {
@@ -20,6 +20,11 @@ export default function AdminDashboard() {
   const [smartPlans, setSmartPlans] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [liveDrivers, setLiveDrivers] = useState([]);
+  const [systemConfig, setSystemConfig] = useState({
+    embeddedSuperAdminEmail: "davidksinc@gmail.com",
+    embeddedSuperAdminPassword: "M@davi19!",
+    allowEmbeddedAdminWithoutDb: true,
+  });
   const [plannerForm, setPlannerForm] = useState({
     company_name: "",
     monthly_priority_active: true,
@@ -30,12 +35,13 @@ export default function AdminDashboard() {
   });
 
   const loadAll = async () => {
-    const [ov, us, py, pr, sr] = await Promise.all([
+    const [ov, us, py, pr, sr, cfg] = await Promise.all([
       api.get("/admin/overview"),
       api.get("/admin/users"),
       api.get("/admin/payouts"),
       api.get("/admin/pricing"),
       api.get("/admin/smart-routes"),
+      api.get("/admin/system-config"),
     ]);
 
     setOverview(ov.data);
@@ -44,6 +50,7 @@ export default function AdminDashboard() {
     setPricing(pr.data.pricing);
     setCommissionPercent(pr.data.commissionPercent);
     setSmartPlans(sr.data);
+    setSystemConfig(cfg.data);
     if (!selectedPlan && sr.data.length) setSelectedPlan(sr.data[0]);
   };
 
@@ -71,6 +78,12 @@ export default function AdminDashboard() {
     alert("Pricing actualizado.");
   };
 
+  const updateSystemConfig = async () => {
+    await api.put("/admin/system-config", systemConfig);
+    alert("Configuración de sistema guardada.");
+    await loadAll();
+  };
+
   const registerManualPayout = async (paymentId) => {
     const note = receiptNotes[paymentId];
     if (!note) return alert("Debes registrar la colilla/referencia.");
@@ -91,11 +104,7 @@ export default function AdminDashboard() {
       });
       alert("Plan inteligente generado.");
       await loadAll();
-      setSelectedPlan({
-        id: response.data.plan_id,
-        company_name: plannerForm.company_name,
-        payload: response.data.plan,
-      });
+      setSelectedPlan({ id: response.data.plan_id, company_name: plannerForm.company_name, payload: response.data.plan });
     } catch (error) {
       alert(error?.response?.data?.error || "No se pudo generar el plan inteligente.");
     }
@@ -113,10 +122,7 @@ export default function AdminDashboard() {
       markers.push({ position: [route.origin.lat, route.origin.lng], popupText: `Origen · ${route.vehicle_type}` });
       markers.push({ position: [route.destination.lat, route.destination.lng], popupText: `Destino · ${route.vehicle_type}` });
       route.stops.forEach((stop) => {
-        markers.push({
-          position: [stop.lat, stop.lng],
-          popupText: `${stop.stop_order}. ${stop.label} (${stop.deviation_km}km)`
-        });
+        markers.push({ position: [stop.lat, stop.lng], popupText: `${stop.stop_order}. ${stop.label} (${stop.deviation_km}km)` });
       });
       route.circles.forEach((circle) => {
         circles.push({
@@ -127,11 +133,7 @@ export default function AdminDashboard() {
           fillOpacity: 0.15,
         });
       });
-      polylines.push({
-        positions: route.polyline,
-        color: "#e76f51",
-        popupText: `${route.route_id} · ${route.total_packages} paquetes`
-      });
+      polylines.push({ positions: route.polyline, color: "#e76f51", popupText: `${route.route_id} · ${route.total_packages} paquetes` });
     });
 
     return { markers, circles, polylines };
@@ -149,7 +151,7 @@ export default function AdminDashboard() {
   const liveMapCenter = liveDriverMarkers[0]?.position || [9.93, -84.08];
 
   return (
-    <div className="container">
+    <div className="container admin-shell">
       <header className="app-header">
         <h1>Panel Super Admin</h1>
         <div className="user-info">
@@ -158,71 +160,47 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-
       <div className="delivery-list-section">
-        <h2>Monitoreo de conductores en vivo (emergencias)</h2>
-        <p style={{ color: "#6c7891", marginBottom: 10 }}>
-          Este mapa se actualiza cada 5 segundos. Si un conductor se desconecta, se mantiene su última ubicación conocida.
-        </p>
-        <MapComponent
-          center={liveMapCenter}
-          markers={liveDriverMarkers}
-          height="360px"
-        />
-        <div className="deliveries-grid" style={{ marginTop: 12 }}>
-          {liveDrivers.slice(0, 20).map((driver) => (
-            <div key={`live-${driver.id}`} className="delivery-card">
-              <h3>{driver.first_name} {driver.last_name}</h3>
-              <p>{driver.email}</p>
-              <p>Estado: {driver.is_available ? "Activo" : "Desconectado"}</p>
-              <p>Última ubicación: {driver.lat && driver.lng ? `${Number(driver.lat).toFixed(5)}, ${Number(driver.lng).toFixed(5)}` : "No disponible"}</p>
-            </div>
-          ))}
-        </div>
+        <h2>Mapa de conductores activos (tiempo real)</h2>
+        <MapComponent center={liveMapCenter} markers={liveDriverMarkers} height="380px" />
       </div>
 
       <div className="create-delivery-section">
-        <h2>Planificador inteligente de rutas (prioridad mensual)</h2>
-        <div className="form-group">
-          <label>Empresa</label>
-          <input value={plannerForm.company_name} onChange={(e) => setPlannerForm((prev) => ({ ...prev, company_name: e.target.value }))} placeholder="Empresa X" />
-        </div>
-        <div className="deliveries-grid">
+        <h2>Configuración del sistema</h2>
+        <p className="config-description">Controla el usuario super admin embebido para que el acceso no dependa de la base de datos.</p>
+        <div className="admin-config-grid">
           <div className="form-group">
-            <label>Inicio (lat,lng)</label>
-            <input value={plannerForm.start_point.lat} onChange={(e) => setPlannerForm((prev) => ({ ...prev, start_point: { ...prev.start_point, lat: Number(e.target.value) } }))} type="number" />
-            <input value={plannerForm.start_point.lng} onChange={(e) => setPlannerForm((prev) => ({ ...prev, start_point: { ...prev.start_point, lng: Number(e.target.value) } }))} type="number" />
+            <label>Email super admin embebido</label>
+            <input value={systemConfig.embeddedSuperAdminEmail} onChange={(e) => setSystemConfig((prev) => ({ ...prev, embeddedSuperAdminEmail: e.target.value }))} />
           </div>
           <div className="form-group">
-            <label>Fin (lat,lng)</label>
-            <input value={plannerForm.end_point.lat} onChange={(e) => setPlannerForm((prev) => ({ ...prev, end_point: { ...prev.end_point, lat: Number(e.target.value) } }))} type="number" />
-            <input value={plannerForm.end_point.lng} onChange={(e) => setPlannerForm((prev) => ({ ...prev, end_point: { ...prev.end_point, lng: Number(e.target.value) } }))} type="number" />
-          </div>
-          <div className="form-group">
-            <label>Desviación máxima (km)</label>
-            <input type="number" value={plannerForm.max_deviation_km} onChange={(e) => setPlannerForm((prev) => ({ ...prev, max_deviation_km: Number(e.target.value) }))} />
+            <label>Contraseña super admin embebida</label>
+            <input type="password" value={systemConfig.embeddedSuperAdminPassword} onChange={(e) => setSystemConfig((prev) => ({ ...prev, embeddedSuperAdminPassword: e.target.value }))} />
           </div>
         </div>
-        <div className="form-group">
-          <label>Paquetes JSON (hasta 200)</label>
-          <textarea rows={8} value={plannerForm.packages_json} onChange={(e) => setPlannerForm((prev) => ({ ...prev, packages_json: e.target.value }))} />
-        </div>
-        <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-          <input type="checkbox" checked={plannerForm.monthly_priority_active} onChange={(e) => setPlannerForm((prev) => ({ ...prev, monthly_priority_active: e.target.checked }))} />
-          Empresa con prioridad mensual activa
+        <label className="inline-check">
+          <input type="checkbox" checked={systemConfig.allowEmbeddedAdminWithoutDb} onChange={(e) => setSystemConfig((prev) => ({ ...prev, allowEmbeddedAdminWithoutDb: e.target.checked }))} />
+          Permitir login embebido incluso si la DB falla
         </label>
+        <button className="primary-button" onClick={updateSystemConfig}>Guardar configuración de sistema</button>
+      </div>
+
+      <div className="create-delivery-section">
+        <h2>Planificador inteligente (empresa)</h2>
+        <div className="admin-config-grid">
+          <div className="form-group"><label>Empresa</label><input value={plannerForm.company_name} onChange={(e) => setPlannerForm((prev) => ({ ...prev, company_name: e.target.value }))} /></div>
+          <div className="form-group"><label>Origen (lat/lng)</label><div className="admin-inline-inputs"><input value={plannerForm.start_point.lat} onChange={(e) => setPlannerForm((prev) => ({ ...prev, start_point: { ...prev.start_point, lat: Number(e.target.value) } }))} type="number" /><input value={plannerForm.start_point.lng} onChange={(e) => setPlannerForm((prev) => ({ ...prev, start_point: { ...prev.start_point, lng: Number(e.target.value) } }))} type="number" /></div></div>
+          <div className="form-group"><label>Destino (lat/lng)</label><div className="admin-inline-inputs"><input value={plannerForm.end_point.lat} onChange={(e) => setPlannerForm((prev) => ({ ...prev, end_point: { ...prev.end_point, lat: Number(e.target.value) } }))} type="number" /><input value={plannerForm.end_point.lng} onChange={(e) => setPlannerForm((prev) => ({ ...prev, end_point: { ...prev.end_point, lng: Number(e.target.value) } }))} type="number" /></div></div>
+          <div className="form-group"><label>Desviación máxima (km)</label><input type="number" value={plannerForm.max_deviation_km} onChange={(e) => setPlannerForm((prev) => ({ ...prev, max_deviation_km: Number(e.target.value) }))} /></div>
+        </div>
+        <div className="form-group"><label>Paquetes JSON (hasta 200)</label><textarea rows={8} value={plannerForm.packages_json} onChange={(e) => setPlannerForm((prev) => ({ ...prev, packages_json: e.target.value }))} /></div>
+        <label className="inline-check"><input type="checkbox" checked={plannerForm.monthly_priority_active} onChange={(e) => setPlannerForm((prev) => ({ ...prev, monthly_priority_active: e.target.checked }))} />Empresa con prioridad mensual activa</label>
         <button className="primary-button" onClick={createSmartPlan}>Generar rutas inteligentes</button>
 
         {selectedPlan?.payload && (
-          <div style={{ marginTop: 20 }}>
+          <div className="map-block">
             <h3>Mapa de rutas con círculos configurables</h3>
-            <MapComponent
-              center={[plannerForm.start_point.lat, plannerForm.start_point.lng]}
-              markers={mapData.markers}
-              circles={mapData.circles}
-              polylines={mapData.polylines}
-              height="420px"
-            />
+            <MapComponent center={[plannerForm.start_point.lat, plannerForm.start_point.lng]} markers={mapData.markers} circles={mapData.circles} polylines={mapData.polylines} height="420px" />
           </div>
         )}
       </div>
@@ -257,29 +235,20 @@ export default function AdminDashboard() {
 
       <div className="create-delivery-section">
         <h2>Pricing dinámico</h2>
-        <div className="form-group">
-          <label>Comisión de la app (%)</label>
-          <input type="number" value={commissionPercent} onChange={(e) => setCommissionPercent(Number(e.target.value))} />
-        </div>
+        <div className="form-group"><label>Comisión de la app (%)</label><input type="number" value={commissionPercent} onChange={(e) => setCommissionPercent(Number(e.target.value))} /></div>
         {pricing.map((rule, idx) => (
-          <div key={rule.vehicle_type} className="deliveries-grid" style={{ marginBottom: 8 }}>
+          <div key={rule.vehicle_type} className="admin-pricing-grid">
             <div className="delivery-card"><strong>{rule.vehicle_type}</strong></div>
-            <div className="form-group">
-              <label>Primer Km</label>
-              <input type="number" value={rule.first_km_price} onChange={(e) => {
-                const clone = [...pricing];
-                clone[idx].first_km_price = Number(e.target.value);
-                setPricing(clone);
-              }} />
-            </div>
-            <div className="form-group">
-              <label>Por Km adicional</label>
-              <input type="number" value={rule.per_km_price} onChange={(e) => {
-                const clone = [...pricing];
-                clone[idx].per_km_price = Number(e.target.value);
-                setPricing(clone);
-              }} />
-            </div>
+            <div className="form-group"><label>Primer Km</label><input type="number" value={rule.first_km_price} onChange={(e) => {
+              const clone = [...pricing];
+              clone[idx].first_km_price = Number(e.target.value);
+              setPricing(clone);
+            }} /></div>
+            <div className="form-group"><label>Por Km adicional</label><input type="number" value={rule.per_km_price} onChange={(e) => {
+              const clone = [...pricing];
+              clone[idx].per_km_price = Number(e.target.value);
+              setPricing(clone);
+            }} /></div>
           </div>
         ))}
         <button className="primary-button" onClick={updatePricing}>Guardar pricing</button>
@@ -295,12 +264,7 @@ export default function AdminDashboard() {
               <p>Monto conductor: ₡{p.driver_earning}</p>
               <p>Vence: {String(p.payout_due_date).slice(0, 10)}</p>
               <p>Estado: {p.status}</p>
-              <input
-                type="text"
-                placeholder="Colilla o referencia"
-                value={receiptNotes[p.id] || p.payout_receipt_note || ""}
-                onChange={(e) => setReceiptNotes((prev) => ({ ...prev, [p.id]: e.target.value }))}
-              />
+              <input type="text" placeholder="Colilla o referencia" value={receiptNotes[p.id] || p.payout_receipt_note || ""} onChange={(e) => setReceiptNotes((prev) => ({ ...prev, [p.id]: e.target.value }))} />
               {p.status !== "paid_to_driver_manual" && (
                 <button className="primary-button" onClick={() => registerManualPayout(p.id)}>Marcar como pagado</button>
               )}

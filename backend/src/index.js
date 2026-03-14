@@ -217,11 +217,12 @@ const PORT = process.env.PORT || 3001;
 bootstrapDb()
   .then(() => {
     startPaymentHoldReleaseJob();
+  })
+  .catch((error) => {
+    console.error("Error en bootstrap de base de datos (modo degradado activo):", error.message);
+  })
+  .finally(() => {
     server.listen(PORT, () => {
       console.log(`Servidor de Express y Socket.IO corriendo en puerto ${PORT}`);
     });
-  })
-  .catch((error) => {
-    console.error("Error en bootstrap de base de datos:", error.message);
-    process.exit(1);
   });

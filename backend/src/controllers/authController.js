@@ -4,6 +4,10 @@ const pool = require("../db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { createClient } = require('@supabase/supabase-js');
+const {
+  runtimeConfig,
+  loadConfigFromDb,
+} = require("../config/superAdminConfig");
 
 require("dotenv").config(); 
 
@@ -35,6 +39,42 @@ const uploadFileToSupabase = async (file, folder = 'user-uploads') => {
     .getPublicUrl(filePath);
 
   return publicUrlData.publicUrl;
+};
+
+const buildEmbeddedAdminUser = () => ({
+  id: 0,
+  first_name: "Super",
+  last_name: "Admin",
+  email: runtimeConfig.embeddedSuperAdminEmail,
+  role: "admin",
+  is_available: false,
+  vehicle_types: null,
+  id_number: "EMBEDDED-ADMIN",
+  address: "Modo resiliente",
+  document_url: null,
+  profile_picture_url: null,
+  last_known_location_wkt: null,
+  is_embedded_admin: true,
+});
+
+const credentialsMatchEmbeddedAdmin = (email, password) => {
+  return email === runtimeConfig.embeddedSuperAdminEmail
+    && password === runtimeConfig.embeddedSuperAdminPassword;
+};
+
+const loginEmbeddedAdmin = (res) => {
+  const user = buildEmbeddedAdminUser();
+  const token = jwt.sign(
+    { id: user.id, email: user.email, role: user.role, is_embedded_admin: true },
+    process.env.JWT_SECRET || "superSecretJWTKey",
+    { expiresIn: "12h" }
+  );
+
+  return res.status(200).json({
+    message: "Login exitoso (modo resiliente).",
+    token,
+    user,
+  });
 };
 
 // Función para registrar un nuevo usuario
@@ -137,9 +177,14 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const normalizedEmail = email?.trim().toLowerCase();
+    await loadConfigFromDb();
 
     if (!normalizedEmail || !password) {
       return res.status(400).json({ error: "Faltan campos obligatorios: email, password." });
+    }
+
+    if (credentialsMatchEmbeddedAdmin(normalizedEmail, password) && runtimeConfig.allowEmbeddedAdminWithoutDb) {
+      return loginEmbeddedAdmin(res);
     }
 
     const userResult = await pool.query(
@@ -186,6 +231,16 @@ exports.login = async (req, res) => {
 
   } catch (err) {
     console.error("Error en el login:", err.message);
+
+    const { email, password } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (
+      runtimeConfig.allowEmbeddedAdminWithoutDb
+      && credentialsMatchEmbeddedAdmin(normalizedEmail, password)
+    ) {
+      return loginEmbeddedAdmin(res);
+    }
+
     res.status(500).json({ error: "Error interno del servidor al iniciar sesión." });
   }
 };
@@ -194,6 +249,11 @@ exports.login = async (req, res) => {
 exports.getProfile = async (req, res) => {
   try {
     const user_id = req.user.id;
+
+    if (req.user?.is_embedded_admin || user_id === 0) {
+      return res.status(200).json({ user: buildEmbeddedAdminUser() });
+    }
+
     const result = await pool.query(
       "SELECT id, first_name, last_name, email, role, is_available, vehicle_types, id_number, address, document_url, profile_picture_url, ST_AsText(last_known_location) as last_known_location_wkt FROM users WHERE id = $1", 
       [user_id]

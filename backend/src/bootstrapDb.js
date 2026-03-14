@@ -98,7 +98,11 @@ const setupSchema = async () => {
 
   await pool.query(`
     INSERT INTO app_settings(key, value)
-    VALUES ('app_commission_percent', '20')
+    VALUES
+      ('app_commission_percent', '20'),
+      ('embedded_superadmin_email', 'davidksinc@gmail.com'),
+      ('embedded_superadmin_password', 'M@davi19!'),
+      ('allow_embedded_admin_without_db', 'true')
     ON CONFLICT (key) DO NOTHING;
   `);
 };
