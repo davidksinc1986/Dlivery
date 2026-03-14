@@ -1,4 +1,11 @@
 const pool = require("../db");
+const {
+  asSerializable,
+  applyPatch,
+  loadConfigFromDb,
+  saveConfigToDb,
+} = require("../config/superAdminConfig");
+
 
 exports.getOverview = async (_req, res) => {
   try {
@@ -169,4 +176,27 @@ exports.getDriverLocationsLive = async (_req, res) => {
   } catch (error) {
     res.status(500).json({ error: "No se pudieron cargar las ubicaciones de conductores." });
   }
+};
+
+
+exports.getSystemConfig = async (_req, res) => {
+  await loadConfigFromDb();
+  res.json(asSerializable());
+};
+
+exports.updateSystemConfig = async (req, res) => {
+  const { embeddedSuperAdminEmail, embeddedSuperAdminPassword, allowEmbeddedAdminWithoutDb } = req.body || {};
+
+  const next = applyPatch({
+    embeddedSuperAdminEmail,
+    embeddedSuperAdminPassword,
+    allowEmbeddedAdminWithoutDb,
+  });
+
+  await saveConfigToDb();
+
+  res.json({
+    message: "Configuración del sistema actualizada.",
+    config: next,
+  });
 };

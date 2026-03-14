@@ -12,6 +12,8 @@ router.get("/drivers", adminController.getDrivers);
 router.get("/drivers/live-locations", adminController.getDriverLocationsLive);
 router.get("/pricing", adminController.getPricing);
 router.put("/pricing", adminController.updatePricing);
+router.get("/system-config", adminController.getSystemConfig);
+router.put("/system-config", adminController.updateSystemConfig);
 router.get("/payouts", adminController.getWeeklyPayouts);
 router.get("/smart-routes", adminController.getSmartRoutePlans);
 router.put("/payouts/:id/pay", adminController.markPayoutAsPaid);
