@@ -52,8 +52,8 @@ export default function Auth() {
     setAuthError("");
 
     if (!isRegistering) {
-      const success = await login(email, password);
-      if (!success) setAuthError("No se pudo iniciar sesión. Verifica tu correo, contraseña o la conexión al servidor.");
+      const result = await login(email, password);
+      if (!result.success) setAuthError(result.error || "No se pudo iniciar sesión.");
       return;
     }
 
@@ -69,7 +69,7 @@ export default function Auth() {
       }
     }
 
-    const success = await register(
+    const result = await register(
       firstName,
       lastName,
       idNumber,
@@ -82,7 +82,7 @@ export default function Auth() {
       document
     );
 
-    if (!success) return setAuthError("Error en el registro.");
+    if (!result.success) return setAuthError(result.error || "Error en el registro.");
 
     alert("Registro exitoso.");
     setIsRegistering(false);

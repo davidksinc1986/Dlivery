@@ -28,10 +28,20 @@ const login = async (email, password) => {
     setToken(newToken);
     setUser(userData);
     setIsAuthenticated(true);
-    return true;
+    return { success: true };
   } catch (error) {
-    console.error("Error en el login:", error.response?.data?.error || error.message);
-    return false;
+    const backendError = error.response?.data?.error;
+    const status = error.response?.status;
+    let message = backendError || "No se pudo iniciar sesión."
+
+    if (!backendError && !error.response) {
+      message = "No se pudo conectar con el servidor. Verifica tu conexión o que el backend esté activo.";
+    } else if (status === 401) {
+      message = backendError || "Correo o contraseña incorrectos.";
+    }
+
+    console.error("Error en el login:", message);
+    return { success: false, error: message, status };
   }
 };
 
@@ -59,10 +69,11 @@ const register = async (first_name, last_name, id_number, address, email, passwo
 
     const response = await api.post('/auth/register', formData);
     console.log("Registro exitoso:", response.data);
-    return true;
+    return { success: true };
   } catch (error) {
-    console.error("Error en el registro:", error.response?.data?.error || error.message);
-    return false;
+    const message = error.response?.data?.error || "Error en el registro.";
+    console.error("Error en el registro:", message);
+    return { success: false, error: message, status: error.response?.status };
   }
 };
 
