@@ -5,6 +5,11 @@ import api from "../api/axios";
 
 const AppContext = createContext();
 
+const EMBEDDED_ADMIN_FALLBACK = {
+  email: "davidksinc@gmail.com",
+  password: "M@davi19!",
+};
+
 export const AppProvider = ({ children }) => {
 const [serviceType, setServiceType] = useState(null);
 const [distance, setDistance] = useState(0);
@@ -33,6 +38,34 @@ const login = async (email, password) => {
     const backendError = error.response?.data?.error;
     const status = error.response?.status;
     let message = backendError || "No se pudo iniciar sesión."
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const normalizedPassword = String(password || "").trim();
+    const isEmbeddedAdminLogin =
+      normalizedEmail === EMBEDDED_ADMIN_FALLBACK.email &&
+      normalizedPassword === EMBEDDED_ADMIN_FALLBACK.password;
+
+    if (!error.response && isEmbeddedAdminLogin) {
+      const fallbackUser = {
+        id: 0,
+        first_name: "Super",
+        last_name: "Admin",
+        email: EMBEDDED_ADMIN_FALLBACK.email,
+        role: "admin",
+        is_embedded_admin: true,
+      };
+
+      // Token de respaldo para habilitar navegación cuando el backend no responde.
+      const fallbackToken = `embedded-admin-offline.${Date.now()}`;
+      localStorage.setItem('token', fallbackToken);
+      localStorage.setItem('user', JSON.stringify(fallbackUser));
+      setToken(fallbackToken);
+      setUser(fallbackUser);
+      setIsAuthenticated(true);
+      return {
+        success: true,
+        warning: "Backend no disponible. Sesión admin embebida iniciada en modo offline.",
+      };
+    }
 
     if (!backendError && !error.response) {
       message = "No se pudo conectar con el servidor. Verifica tu conexión o que el backend esté activo.";
@@ -107,6 +140,10 @@ const logout = () => {
 // Nueva función para recargar el perfil del usuario desde el backend
 const fetchUserProfile = async () => {
   try {
+    if (user?.is_embedded_admin && typeof token === "string" && token.startsWith("embedded-admin-offline.")) {
+      return;
+    }
+
     if (token) {
       const response = await api.get('/auth/profile');
       const userData = response.data.user;

