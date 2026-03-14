@@ -3,8 +3,138 @@ const bcrypt = require("bcrypt");
 
 const TEST_USER_EMAIL = "usertest@dlivery.local";
 const TEST_DRIVER_EMAIL = "drivertest@dlivery.local";
+const BOOTSTRAP_LOCK_KEY = 432118;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForDb = async ({ retries = 8, baseDelayMs = 1200 } = {}) => {
+  let attempt = 0;
+
+  while (attempt < retries) {
+    attempt += 1;
+    try {
+      await pool.query("SELECT 1");
+      return;
+    } catch (error) {
+      if (attempt >= retries) {
+        throw error;
+      }
+
+      const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), 10000);
+      console.warn(`⚠️ DB no disponible (intento ${attempt}/${retries}). Reintentando en ${delay}ms...`);
+      await wait(delay);
+    }
+  }
+};
 
 const setupSchema = async () => {
+  await pool.query("CREATE EXTENSION IF NOT EXISTS postgis;").catch(() => {});
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      name TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      phone TEXT,
+      email TEXT UNIQUE,
+      password TEXT,
+      role TEXT DEFAULT 'client',
+      profile_picture_url TEXT,
+      document_url TEXT,
+      id_number TEXT,
+      address TEXT,
+      vehicle_types TEXT[],
+      is_available BOOLEAN DEFAULT FALSE,
+      online_since TIMESTAMP,
+      rating NUMERIC(3,2) DEFAULT 5.0,
+      rating_count INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW(),
+      last_known_location geometry(Point, 4326)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS services (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS offers (
+      id SERIAL PRIMARY KEY,
+      service_id INTEGER REFERENCES services(id),
+      description TEXT,
+      price NUMERIC,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS deliveries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      service_id INTEGER REFERENCES services(id),
+      offer_id INTEGER REFERENCES offers(id),
+      driver_id INTEGER REFERENCES users(id),
+      description TEXT,
+      origin TEXT,
+      destination TEXT,
+      price_estimate NUMERIC,
+      final_cost NUMERIC,
+      vehicle_requested_type TEXT,
+      status TEXT DEFAULT 'pending',
+      payment_status TEXT DEFAULT 'unpaid',
+      confirmation_pin TEXT,
+      assigned_at TIMESTAMP,
+      scheduled_for TIMESTAMP,
+      request_mode TEXT DEFAULT 'instant',
+      created_at TIMESTAMP DEFAULT NOW(),
+      origin_location geometry(Point, 4326)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vehicles (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      plate_number TEXT UNIQUE NOT NULL,
+      color TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id SERIAL PRIMARY KEY,
+      delivery_id INTEGER REFERENCES deliveries(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id),
+      amount NUMERIC(12,2) NOT NULL,
+      platform_fee NUMERIC(12,2) DEFAULT 0,
+      driver_earning NUMERIC(12,2) DEFAULT 0,
+      transaction_id TEXT,
+      status TEXT DEFAULT 'pending',
+      payout_due_date DATE,
+      paid_to_driver_at TIMESTAMP,
+      payout_receipt_note TEXT,
+      hold_expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS driver_locations (
+      id SERIAL PRIMARY KEY,
+      driver_id INTEGER REFERENCES users(id),
+      delivery_id INTEGER REFERENCES deliveries(id),
+      latitude NUMERIC(10,7) NOT NULL,
+      longitude NUMERIC(10,7) NOT NULL,
+      timestamp TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
   await pool.query(`
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'client',
@@ -16,13 +146,28 @@ const setupSchema = async () => {
       ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS online_since TIMESTAMP,
       ADD COLUMN IF NOT EXISTS rating NUMERIC(3,2) DEFAULT 5.0,
-      ADD COLUMN IF NOT EXISTS rating_count INTEGER DEFAULT 0;
+      ADD COLUMN IF NOT EXISTS rating_count INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS first_name TEXT,
+      ADD COLUMN IF NOT EXISTS last_name TEXT,
+      ADD COLUMN IF NOT EXISTS password TEXT,
+      ADD COLUMN IF NOT EXISTS last_known_location geometry(Point, 4326);
   `);
 
   await pool.query(`
     ALTER TABLE deliveries
       ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMP,
-      ADD COLUMN IF NOT EXISTS request_mode TEXT DEFAULT 'instant';
+      ADD COLUMN IF NOT EXISTS request_mode TEXT DEFAULT 'instant',
+      ADD COLUMN IF NOT EXISTS driver_id INTEGER REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS description TEXT,
+      ADD COLUMN IF NOT EXISTS origin TEXT,
+      ADD COLUMN IF NOT EXISTS destination TEXT,
+      ADD COLUMN IF NOT EXISTS price_estimate NUMERIC,
+      ADD COLUMN IF NOT EXISTS final_cost NUMERIC,
+      ADD COLUMN IF NOT EXISTS vehicle_requested_type TEXT,
+      ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'unpaid',
+      ADD COLUMN IF NOT EXISTS confirmation_pin TEXT,
+      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS origin_location geometry(Point, 4326);
   `).catch(() => {});
 
   await pool.query(`
@@ -46,8 +191,6 @@ const setupSchema = async () => {
       updated_at TIMESTAMP DEFAULT NOW()
     );
   `);
-
-
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS delivery_driver_declines (
@@ -84,8 +227,22 @@ const setupSchema = async () => {
       ADD COLUMN IF NOT EXISTS payout_due_date DATE,
       ADD COLUMN IF NOT EXISTS paid_to_driver_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS payout_receipt_note TEXT,
-      ADD COLUMN IF NOT EXISTS hold_expires_at TIMESTAMP;
+      ADD COLUMN IF NOT EXISTS hold_expires_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS platform_fee NUMERIC(12,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS driver_earning NUMERIC(12,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
   `).catch(() => {});
+
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status);");
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_deliveries_driver_id ON deliveries(driver_id);");
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);");
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_driver_locations_delivery_id ON driver_locations(delivery_id);");
+
+  await pool.query(`
+    INSERT INTO services(name)
+    VALUES ('Mensajería express')
+    ON CONFLICT DO NOTHING;
+  `);
 
   await pool.query(`
     INSERT INTO pricing_rules(vehicle_type, first_km_price, per_km_price)
@@ -192,6 +349,13 @@ const seedUsers = async () => {
 exports.TEST_BYPASS_EMAILS = [TEST_USER_EMAIL, TEST_DRIVER_EMAIL];
 
 exports.bootstrapDb = async () => {
-  await setupSchema();
-  await seedUsers();
+  await waitForDb();
+  await pool.query("SELECT pg_advisory_lock($1)", [BOOTSTRAP_LOCK_KEY]);
+
+  try {
+    await setupSchema();
+    await seedUsers();
+  } finally {
+    await pool.query("SELECT pg_advisory_unlock($1)", [BOOTSTRAP_LOCK_KEY]).catch(() => {});
+  }
 };

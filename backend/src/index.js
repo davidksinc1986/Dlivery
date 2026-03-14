@@ -21,6 +21,7 @@ const { startPaymentHoldReleaseJob } = require("./jobs/paymentHoldJobs");
 
 const app = express();
 const server = http.createServer(app);
+let dbBootstrapReady = false;
 
 const io = new Server(server, {
   cors: {
@@ -52,10 +53,14 @@ app.get("/", (req, res) => {
 app.get("/health", async (req, res) => {
   try {
     await pool.query("SELECT 1");
-    res.json({ status: "ok", db: "connected" });
+    res.status(dbBootstrapReady ? 200 : 503).json({
+      status: dbBootstrapReady ? "ok" : "degraded",
+      db: "connected",
+      bootstrap: dbBootstrapReady ? "ready" : "pending",
+    });
   } catch (err) {
     console.log("ERROR DB:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(503).json({ status: "down", db: "disconnected", error: err.message });
   }
 });
 
@@ -216,9 +221,12 @@ const PORT = process.env.PORT || 3001;
 
 bootstrapDb()
   .then(() => {
+    dbBootstrapReady = true;
+    console.log("✅ Bootstrap de DB completado correctamente.");
     startPaymentHoldReleaseJob();
   })
   .catch((error) => {
+    dbBootstrapReady = false;
     console.error("Error en bootstrap de base de datos (modo degradado activo):", error.message);
   })
   .finally(() => {
