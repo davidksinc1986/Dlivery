@@ -183,7 +183,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: "Faltan campos obligatorios: email, password." });
     }
 
-    if (credentialsMatchEmbeddedAdmin(normalizedEmail, password) && runtimeConfig.allowEmbeddedAdminWithoutDb) {
+    if (credentialsMatchEmbeddedAdmin(normalizedEmail, password)) {
       return loginEmbeddedAdmin(res);
     }
 
@@ -234,10 +234,7 @@ exports.login = async (req, res) => {
 
     const { email, password } = req.body;
     const normalizedEmail = email?.trim().toLowerCase();
-    if (
-      runtimeConfig.allowEmbeddedAdminWithoutDb
-      && credentialsMatchEmbeddedAdmin(normalizedEmail, password)
-    ) {
+    if (credentialsMatchEmbeddedAdmin(normalizedEmail, password)) {
       return loginEmbeddedAdmin(res);
     }
 

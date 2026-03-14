@@ -5,10 +5,11 @@ const getApiBaseUrl = () => {
 
   if (typeof window !== "undefined") {
     const { protocol, hostname } = window.location;
-    return `${protocol}//${hostname}:3001`;
+    const resolvedHost = hostname === "localhost" ? "127.0.0.1" : hostname;
+    return `${protocol}//${resolvedHost}:3001`;
   }
 
-  return "http://localhost:3001";
+  return "http://127.0.0.1:3001";
 };
 
 const api = axios.create({

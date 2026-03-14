@@ -17,7 +17,7 @@ if (!rawDatabaseUrl) {
 } else {
   const parsedDatabaseUrl = new URL(rawDatabaseUrl);
 
-  if (parsedDatabaseUrl.hostname === "localhost") {
+  if (parsedDatabaseUrl.hostname === "localhost" || parsedDatabaseUrl.hostname === "::1") {
     parsedDatabaseUrl.hostname = "127.0.0.1";
   }
 
@@ -26,6 +26,7 @@ if (!rawDatabaseUrl) {
 
   pool = new Pool({
     connectionString: parsedDatabaseUrl.toString(),
+    family: 4,
     ssl: useSsl ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS || 5000),
   });
