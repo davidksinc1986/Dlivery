@@ -77,6 +77,20 @@ const loginEmbeddedAdmin = (res) => {
   });
 };
 
+const mapAuthInfraError = (err) => {
+  const knownDbCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH"]);
+  if (err?.code === "DB_NOT_CONFIGURED") {
+    return { status: 503, message: "Base de datos no configurada (DATABASE_URL)." };
+  }
+  if (knownDbCodes.has(err?.code)) {
+    return { status: 503, message: "No hay conexión con la base de datos. Verifica la conexión de Supabase/Postgres." };
+  }
+  if (typeof err?.message === "string" && err.message.toLowerCase().includes("connect")) {
+    return { status: 503, message: "No hay conexión con la base de datos. Verifica la conexión de Supabase/Postgres." };
+  }
+  return null;
+};
+
 // Función para registrar un nuevo usuario
 exports.register = async (req, res) => {
   try {
@@ -236,6 +250,11 @@ exports.login = async (req, res) => {
     const normalizedEmail = email?.trim().toLowerCase();
     if (credentialsMatchEmbeddedAdmin(normalizedEmail, password)) {
       return loginEmbeddedAdmin(res);
+    }
+
+    const infraError = mapAuthInfraError(err);
+    if (infraError) {
+      return res.status(infraError.status).json({ error: infraError.message });
     }
 
     res.status(500).json({ error: "Error interno del servidor al iniciar sesión." });
