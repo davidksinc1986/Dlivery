@@ -23,6 +23,7 @@ const [totalEarnings, setTotalEarnings] = useState(0);
 const [notifications, setNotifications] = useState([]);
 const [routeModeActive, setRouteModeActive] = useState(false);
 const [driverBatchRules, setDriverBatchRules] = useState([]);
+const [activeTab, setActiveTab] = useState("available");
 
 const socketRef = useRef(null);
 const currentDeliveryIntervalIdRef = useRef(null);
@@ -159,6 +160,22 @@ const fetchNotifications = useCallback(async () => {
   }
 }, []);
 
+// Función para obtener las entregas disponibles (pool de ofertas)
+const fetchAvailableDeliveries = useCallback(async () => { // <--- useCallback
+  setDriverError("");
+  if (!isDriverAvailable) {
+    setAvailableDeliveries([]);
+    return;
+  }
+  try {
+    const response = await api.get('/drivers/deliveries/available');
+    setAvailableDeliveries(response.data);
+  } catch (error) { // <-- SINTAXIS CORREGIDA
+    setDriverError(error.response?.data?.error || "Error al cargar entregas disponibles.");
+    setAvailableDeliveries([]);
+  }
+}, [isDriverAvailable, api]); // Depende de 'isDriverAvailable', 'api'
+
 // Función para alternar la disponibilidad (Online/Offline)
 const toggleAvailability = useCallback(async () => { // <--- useCallback
   setDriverError("");
@@ -189,22 +206,6 @@ const toggleAvailability = useCallback(async () => { // <--- useCallback
     setDriverError(error.response?.data?.error || "Error al cambiar disponibilidad.");
   }
 }, [isDriverAvailable, api, fetchAvailableDeliveries]); // Depende de 'isDriverAvailable', 'api', 'fetchAvailableDeliveries'
-
-// Función para obtener las entregas disponibles (pool de ofertas)
-const fetchAvailableDeliveries = useCallback(async () => { // <--- useCallback
-  setDriverError("");
-  if (!isDriverAvailable) {
-    setAvailableDeliveries([]);
-    return;
-  }
-  try {
-    const response = await api.get('/drivers/deliveries/available');
-    setAvailableDeliveries(response.data);
-  } catch (error) { // <-- SINTAXIS CORREGIDA
-    setDriverError(error.response?.data?.error || "Error al cargar entregas disponibles.");
-    setAvailableDeliveries([]);
-  }
-}, [isDriverAvailable, api]); // Depende de 'isDriverAvailable', 'api'
 
 // Efecto para cargar disponibilidad inicial, mis entregas y ganancias
 useEffect(() => {
@@ -338,6 +339,19 @@ const getEstimatedDriverPayout = (delivery) => {
   return Number(delivery.price_estimate) * ((100 - discountPercent) / 100);
 };
 
+const formatMoney = (amount) => `₡${Number(amount || 0).toFixed(0)}`;
+
+const openMapsDirections = (coordinateText) => {
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(coordinateText)}`, '_blank', 'noopener,noreferrer');
+};
+
+const quickStats = [
+  { label: "Disponibles", value: filteredAvailableDeliveries.length },
+  { label: "Asignadas", value: assignedDeliveries.length },
+  { label: "En curso", value: inProgressDeliveries.length },
+  { label: "Ganancia total", value: formatMoney(totalEarnings) },
+];
+
 return (
   <div className="container">
     <header className="app-header">
@@ -353,6 +367,22 @@ return (
       <UserProfile onClose={() => setShowProfile(false)} />
     ) : (
       <> {/* Contenido principal si no se muestra el perfil */}
+        <section className="driver-hero">
+          <div>
+            <p className="driver-hero-eyebrow">DLIVERY DRIVER</p>
+            <h2>Controla tus viajes y ganancias en una sola vista</h2>
+            <p className="driver-hero-copy">Diseño mobile-first, con estados claros, accesos rápidos y enlaces directos a Maps para cada parada.</p>
+          </div>
+          <div className="driver-stats-grid">
+            {quickStats.map((stat) => (
+              <article key={stat.label} className="driver-stat-card">
+                <span>{stat.label}</span>
+                <strong>{stat.value}</strong>
+              </article>
+            ))}
+          </div>
+        </section>
+
         <div className="driver-controls-section">
           <h2>Notificaciones Prioritarias</h2>
           {notifications.length === 0 ? <p>Sin notificaciones nuevas.</p> : notifications.slice(0,5).map((n) => (
@@ -362,7 +392,6 @@ return (
             </div>
           ))}
         </div>
-
 
         <div className="driver-controls-section">
           <h2>Mi Disponibilidad</h2>
@@ -376,7 +405,6 @@ return (
           {driverError && <p className="error-message">{driverError}</p>}
         </div>
 
-        {/* SECCIÓN DE GANANCIAS */}
         <div className="driver-controls-section">
           <h2>Mis Ganancias</h2>
           <p style={{fontSize: '1.2em', fontWeight: 'bold'}}>Total Acumulado: ₡{totalEarnings.toFixed(2)}</p>
@@ -385,159 +413,144 @@ return (
           <button onClick={() => fetchEarnings('month')} className="primary-button small-button">Este Mes</button>
         </div>
 
-        {/* SECCIÓN DE VIAJES DIRECTOS DISPONIBLES */}
-        <div className="available-deliveries-section">
-          <h2>Viajes Directos Disponibles</h2>
-          {!isDriverAvailable ? (
-            <p>Activa tu disponibilidad para ver viajes.</p>
-          ) : Object.keys(groupedDirectDeliveries).length === 0 ? (
-            <p>No hay viajes directos disponibles para tus vehículos en este momento.</p>
-          ) : (
-            Object.keys(groupedDirectDeliveries).map(vehicleType => (
-              <div key={vehicleType} style={{marginBottom: '20px'}}>
-                <h3>{formatVehicleType(vehicleType)}</h3>
-                <div className="deliveries-grid">
-                  {groupedDirectDeliveries[vehicleType].map((delivery) => (
-                    <div key={delivery.id} className="delivery-card">
-                      <h3>Entrega #{delivery.id}</h3>
-                      <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
-                      <p>Descripción: {delivery.description}</p>
-                      <p>Origen: {delivery.origin}</p>
-                      <p>Destino: {delivery.destination}</p>
-                      <p>Estimado: ₡{delivery.price_estimate}</p>
-                      <p>Pago conductor estimado: ₡{getEstimatedDriverPayout(delivery).toFixed(0)}</p>
-                      <button onClick={() => handleAcceptDelivery(delivery.id)} className="primary-button">Aceptar Entrega</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
+        <div className="driver-tabs" role="tablist" aria-label="Secciones de entregas">
+          <button className={`tab-pill ${activeTab === 'available' ? 'active' : ''}`} onClick={() => setActiveTab('available')}>Disponibles</button>
+          <button className={`tab-pill ${activeTab === 'assigned' ? 'active' : ''}`} onClick={() => setActiveTab('assigned')}>Asignadas</button>
+          <button className={`tab-pill ${activeTab === 'in_progress' ? 'active' : ''}`} onClick={() => setActiveTab('in_progress')}>En curso</button>
         </div>
 
-        {/* SECCIÓN DE VIAJES CON OFERTA DISPONIBLES */}
-        <div className="available-deliveries-section">
-          <h2>Viajes con Oferta Disponibles (Pool)</h2>
-          {!isDriverAvailable ? (
-            <p>Activa tu disponibilidad para ver ofertas.</p>
-          ) : Object.keys(groupedOfferDeliveries).length === 0 ? (
-            <p>No hay viajes con oferta disponibles para tus vehículos en este momento.</p>
-          ) : (
-            Object.keys(groupedOfferDeliveries).map(vehicleType => (
-              <div key={vehicleType} style={{marginBottom: '20px'}}>
-                <h3>{formatVehicleType(vehicleType)}</h3>
-                <div className="deliveries-grid">
-                  {groupedOfferDeliveries[vehicleType].map((delivery) => (
-                    <div key={delivery.id} className="delivery-card">
-                      <h3>Entrega #{delivery.id} (Oferta)</h3>
-                      <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
-                      <p>Descripción: {delivery.description}</p>
-                      <p>Origen: {delivery.origin}</p>
-                      <p>Destino: {delivery.destination}</p>
-                      <p>Oferta del Cliente: ₡{delivery.price_estimate}</p>
-                      <p>Pago conductor estimado: ₡{getEstimatedDriverPayout(delivery).toFixed(0)}</p>
-                      <button onClick={() => handleAcceptDelivery(delivery.id)} className="primary-button">Aceptar Oferta</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* SECCIÓN MEJORADA: Entregas Asignadas (en espera de inicio) */}
-        <div className="assigned-deliveries-section">
-          <h2>Mis Entregas Asignadas ({assignedDeliveries.length})</h2>
-          {assignedDeliveries.length === 0 ? (
-              <p>No tienes entregas asignadas sin iniciar.</p>
-          ) : (
-              Object.keys(groupedAssignedDeliveries).map(vehicleType => (
+        {activeTab === 'available' && (
+          <>
+            <div className="available-deliveries-section">
+              <h2>Viajes Directos Disponibles</h2>
+              {!isDriverAvailable ? (
+                <p>Activa tu disponibilidad para ver viajes.</p>
+              ) : Object.keys(groupedDirectDeliveries).length === 0 ? (
+                <p>No hay viajes directos disponibles para tus vehículos en este momento.</p>
+              ) : (
+                Object.keys(groupedDirectDeliveries).map(vehicleType => (
                   <div key={vehicleType} style={{marginBottom: '20px'}}>
-                      <h3>{formatVehicleType(vehicleType)}</h3>
-                      <div className="deliveries-grid">
-                          {groupedAssignedDeliveries[vehicleType].map((delivery) => (
-                          <div key={delivery.id} className="delivery-card">
-                              <h3>Entrega #{delivery.id} - {delivery.status.toUpperCase()}</h3>
-                              <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
-                              <p>Descripción: {delivery.description}</p>
-                              <p>Origen: {delivery.origin}</p>
-                              <p>Destino: {delivery.destination}</p>
-                              <p>Precio Estimado: ₡{delivery.price_estimate}</p>
-                              {/* BOTONES DE MAPS */}
-                              <div style={{marginTop: '10px', marginBottom: '10px'}}>
-                                <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.origin)}`, '_blank')} 
-                                  className="primary-button small-button" 
-                                  style={{marginRight: '5px'}}
-                                >
-                                  Origen en Maps
-                                </button>
-                                <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.destination)}`, '_blank')} 
-                                  className="primary-button small-button"
-                                >
-                                  Destino en Maps
-                                </button>
-                              </div>
-                              <button onClick={() => handleStartDelivery(delivery.id)} className="primary-button">Iniciar Entrega</button>
-                          </div>
-                          ))}
-                      </div>
+                    <h3>{formatVehicleType(vehicleType)}</h3>
+                    <div className="deliveries-grid">
+                      {groupedDirectDeliveries[vehicleType].map((delivery) => (
+                        <div key={delivery.id} className="delivery-card">
+                          <h3>Entrega #{delivery.id}</h3>
+                          <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
+                          <p>Descripción: {delivery.description}</p>
+                          <p>Origen: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.origin)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                          <p>Destino: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.destination)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                          <p>Estimado: ₡{delivery.price_estimate}</p>
+                          <p>Pago conductor estimado: ₡{getEstimatedDriverPayout(delivery).toFixed(0)}</p>
+                          <button onClick={() => handleAcceptDelivery(delivery.id)} className="primary-button">Aceptar Entrega</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-              ))
-          )}
-        </div>
+                ))
+              )}
+            </div>
 
-        {/* SECCIÓN: Entregas en Curso */}
-        <div className="assigned-deliveries-section">
-          <h2>Mis Entregas en Curso ({inProgressDeliveries.length})</h2>
-          {inProgressDeliveries.length === 0 ? (
-              <p>No tienes entregas en curso.</p>
-          ) : (
-              Object.keys(groupedInProgressDeliveries).map(vehicleType => (
+            <div className="available-deliveries-section">
+              <h2>Viajes con Oferta Disponibles</h2>
+              {!isDriverAvailable ? (
+                <p>Activa tu disponibilidad para ver viajes.</p>
+              ) : Object.keys(groupedOfferDeliveries).length === 0 ? (
+                <p>No hay viajes con oferta disponibles para tus vehículos en este momento.</p>
+              ) : (
+                Object.keys(groupedOfferDeliveries).map(vehicleType => (
                   <div key={vehicleType} style={{marginBottom: '20px'}}>
-                      <h3>{formatVehicleType(vehicleType)}</h3>
-                      <div className="deliveries-grid">
-                          {groupedInProgressDeliveries[vehicleType].map((delivery) => (
-                          <div key={delivery.id} className="delivery-card">
-                              <h3>Entrega #{delivery.id} - {delivery.status.toUpperCase()}</h3>
-                              <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
-                              <p>Descripción: {delivery.description}</p>
-                              <p>Origen: {delivery.origin}</p>
-                              <p>Destino: {delivery.destination}</p>
-                              <p>Precio Estimado: ₡{delivery.price_estimate}</p>
-                              {/* BOTONES DE MAPS */}
-                              <div style={{marginTop: '10px', marginBottom: '10px'}}>
-                                <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.origin)}`, '_blank')} 
-                                  className="primary-button small-button" 
-                                  style={{marginRight: '5px'}}
-                                >
-                                  Origen en Maps
-                                </button>
-                                <button 
-                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${toMapsQuery(delivery.destination)}`, '_blank')} 
-                                  className="primary-button small-button"
-                                >
-                                  Destino en Maps
-                                </button>
-                              </div>
-                              {/* INPUT PARA EL PIN Y BOTÓN DE COMPLETAR */}
-                              <input
-                                  type="text"
-                                  placeholder="Ingresa PIN de 4 dígitos"
-                                  value={pinInput}
-                                  onChange={(e) => setPinInput(e.target.value)}
-                                  style={{width: 'calc(100% - 20px)', marginTop: '10px'}}
-                              />
-                              <button onClick={() => handleCompleteDelivery(delivery.id)} className="primary-button">Completar Entrega</button>
-                          </div>
-                          ))}
-                      </div>
+                    <h3>{formatVehicleType(vehicleType)}</h3>
+                    <div className="deliveries-grid">
+                      {groupedOfferDeliveries[vehicleType].map((delivery) => (
+                        <div key={delivery.id} className="delivery-card">
+                          <h3>Entrega #{delivery.id} (Oferta)</h3>
+                          <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
+                          <p>Descripción: {delivery.description}</p>
+                          <p>Origen: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.origin)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                          <p>Destino: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.destination)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                          <p>Oferta del Cliente: ₡{delivery.price_estimate}</p>
+                          <p>Pago conductor estimado: ₡{getEstimatedDriverPayout(delivery).toFixed(0)}</p>
+                          <button onClick={() => handleAcceptDelivery(delivery.id)} className="primary-button">Aceptar Oferta</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-              ))
-          )}
-        </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'assigned' && (
+          <div className="assigned-deliveries-section">
+            <h2>Mis Entregas Asignadas ({assignedDeliveries.length})</h2>
+            {assignedDeliveries.length === 0 ? (
+                <p>No tienes entregas asignadas sin iniciar.</p>
+            ) : (
+                Object.keys(groupedAssignedDeliveries).map(vehicleType => (
+                    <div key={vehicleType} style={{marginBottom: '20px'}}>
+                        <h3>{formatVehicleType(vehicleType)}</h3>
+                        <div className="deliveries-grid">
+                            {groupedAssignedDeliveries[vehicleType].map((delivery) => (
+                            <div key={delivery.id} className="delivery-card">
+                                <h3>Entrega #{delivery.id} - {delivery.status.toUpperCase()}</h3>
+                                <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
+                                <p>Descripción: {delivery.description}</p>
+                                <p>Origen: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.origin)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                                <p>Destino: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.destination)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                                <p>Precio Estimado: ₡{delivery.price_estimate}</p>
+                                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                                  <button onClick={() => openMapsDirections(delivery.origin)} className="primary-button small-button" style={{marginRight: '5px'}}>Ir a Origen</button>
+                                  <button onClick={() => openMapsDirections(delivery.destination)} className="primary-button small-button">Ir a Destino</button>
+                                </div>
+                                <button onClick={() => handleStartDelivery(delivery.id)} className="primary-button">Iniciar Entrega</button>
+                            </div>
+                            ))}
+                        </div>
+                    </div>
+                ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'in_progress' && (
+          <div className="assigned-deliveries-section">
+            <h2>Mis Entregas en Curso ({inProgressDeliveries.length})</h2>
+            {inProgressDeliveries.length === 0 ? (
+                <p>No tienes entregas en curso.</p>
+            ) : (
+                Object.keys(groupedInProgressDeliveries).map(vehicleType => (
+                    <div key={vehicleType} style={{marginBottom: '20px'}}>
+                        <h3>{formatVehicleType(vehicleType)}</h3>
+                        <div className="deliveries-grid">
+                            {groupedInProgressDeliveries[vehicleType].map((delivery) => (
+                            <div key={delivery.id} className="delivery-card">
+                                <h3>Entrega #{delivery.id} - {delivery.status.toUpperCase()}</h3>
+                                <p>Cliente: {delivery.client_first_name} {delivery.client_last_name || ""}</p>
+                                <p>Descripción: {delivery.description}</p>
+                                <p>Origen: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.origin)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                                <p>Destino: <a href={`https://www.google.com/maps/search/?api=1&query=${toMapsQuery(delivery.destination)}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                                <p>Precio Estimado: ₡{delivery.price_estimate}</p>
+                                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                                  <button onClick={() => openMapsDirections(delivery.origin)} className="primary-button small-button" style={{marginRight: '5px'}}>Ir a Origen</button>
+                                  <button onClick={() => openMapsDirections(delivery.destination)} className="primary-button small-button">Ir a Destino</button>
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="Ingresa PIN de 4 dígitos"
+                                    value={pinInput}
+                                    onChange={(e) => setPinInput(e.target.value)}
+                                    style={{width: 'calc(100% - 20px)', marginTop: '10px'}}
+                                />
+                                <button onClick={() => handleCompleteDelivery(delivery.id)} className="primary-button">Completar Entrega</button>
+                            </div>
+                            ))}
+                        </div>
+                    </div>
+                ))
+            )}
+          </div>
+        )}
 
         {/* Mapa para la entrega activa del conductor (solo la primera en curso) */}
         <div className="map-display-section">

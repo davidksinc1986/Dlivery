@@ -561,3 +561,165 @@ border-color: #e0e0e0;
 .wizard-wrap h3 {
   margin: 12px 0 6px;
 }
+
+/* --- 2026 refresh: sober / mobile-first like ride-hailing apps --- */
+:root {
+  --bg: #0f1115;
+  --surface: #171a21;
+  --surface-soft: #1e232d;
+  --line: #2a303c;
+  --text: #f5f7fb;
+  --muted: #aab1be;
+  --brand: #ffffff;
+  --accent: #24c7a1;
+  --danger: #e04f5f;
+}
+
+body {
+  background: linear-gradient(180deg, #0d0f14 0%, #151922 100%);
+  color: var(--text);
+}
+
+.container {
+  background-color: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.app-header,
+.create-delivery-section,
+.delivery-list-section,
+.driver-controls-section,
+.available-deliveries-section,
+.assigned-deliveries-section,
+.map-display-section,
+.map-selection-section,
+.tracking-section,
+.user-profile-section {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.app-header h1,
+h1, h2, h3, h4, h5, h6,
+.delivery-card h3,
+.create-delivery-section h2,
+.delivery-list-section h2,
+.driver-controls-section h2,
+.available-deliveries-section h2,
+.assigned-deliveries-section h2,
+.map-display-section h2,
+.map-selection-section h3,
+.user-profile-section h2 {
+  color: var(--brand);
+}
+
+.delivery-card {
+  background: #131720;
+  border-color: #2a2f3a;
+}
+
+.delivery-card p,
+.user-info span,
+.map-selection-section p {
+  color: var(--muted);
+}
+
+a {
+  color: #6cc6ff;
+}
+
+.primary-button {
+  background-color: #ffffff;
+  color: #111;
+}
+
+.primary-button:hover {
+  background-color: #dce2ec;
+}
+
+.logout-button,
+.driver-controls-section .primary-button.unavailable {
+  background-color: var(--danger);
+  color: #fff;
+}
+
+.driver-controls-section .primary-button.available {
+  background-color: var(--accent);
+  color: #042117;
+}
+
+.driver-hero {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, #1a1f29, #131821);
+}
+
+.driver-hero-eyebrow {
+  margin: 0;
+  color: #8d95a3;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+}
+
+.driver-hero-copy {
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.driver-stats-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.driver-stat-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0f141c;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.driver-stat-card span {
+  color: #8f99aa;
+  font-size: 0.82rem;
+}
+
+.driver-stat-card strong {
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.driver-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.tab-pill {
+  background: #10141c;
+  color: #c0c8d6;
+  border: 1px solid #2a303c;
+  border-radius: 999px;
+  margin-top: 0;
+}
+
+.tab-pill.active {
+  background: #fff;
+  color: #111;
+  border-color: #fff;
+}
+
+@media (min-width: 768px) {
+  .driver-stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
