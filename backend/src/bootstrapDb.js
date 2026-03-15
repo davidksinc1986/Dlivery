@@ -1,8 +1,16 @@
 const pool = require("./db");
 const bcrypt = require("bcrypt");
 
-const TEST_USER_EMAIL = "usertest@dlivery.local";
-const TEST_DRIVER_EMAIL = "drivertest@dlivery.local";
+const normalizeEmail = (value, fallback) => String(value || fallback).trim().toLowerCase();
+const normalizePassword = (value, fallback) => String(value || fallback).trim();
+
+const SEED_SUPERADMIN_EMAIL = normalizeEmail(process.env.SEED_SUPERADMIN_EMAIL, "davidksinc@gmail.com");
+const SEED_SUPERADMIN_PASSWORD = normalizePassword(process.env.SEED_SUPERADMIN_PASSWORD, "M@davi19!");
+const SEED_TEST_USER_EMAIL = normalizeEmail(process.env.SEED_TEST_USER_EMAIL, "usertest@dlivery.local");
+const SEED_TEST_USER_PASSWORD = normalizePassword(process.env.SEED_TEST_USER_PASSWORD, "usertest");
+const SEED_TEST_DRIVER_EMAIL = normalizeEmail(process.env.SEED_TEST_DRIVER_EMAIL, "drivertest@dlivery.local");
+const SEED_TEST_DRIVER_PASSWORD = normalizePassword(process.env.SEED_TEST_DRIVER_PASSWORD, "drivertest");
+
 const BOOTSTRAP_LOCK_KEY = 432118;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -257,11 +265,11 @@ const setupSchema = async () => {
     INSERT INTO app_settings(key, value)
     VALUES
       ('app_commission_percent', '20'),
-      ('embedded_superadmin_email', 'davidksinc@gmail.com'),
-      ('embedded_superadmin_password', 'M@davi19!'),
+      ('embedded_superadmin_email', $1),
+      ('embedded_superadmin_password', $2),
       ('allow_embedded_admin_without_db', 'true')
     ON CONFLICT (key) DO NOTHING;
-  `);
+  `, [SEED_SUPERADMIN_EMAIL, SEED_SUPERADMIN_PASSWORD]);
 };
 
 const upsertUserByEmail = async ({ email, firstName, lastName, password, role, idNumber, address, vehicleTypes = null }) => {
@@ -300,34 +308,34 @@ const seedUsers = async () => {
      SET email = $1
      WHERE LOWER(email) = $2
        AND NOT EXISTS (SELECT 1 FROM users WHERE LOWER(email) = $3)`,
-    ["davidksinc@gmail.com", "davidksiinc@gmail.com", "davidksinc@gmail.com"]
+    [SEED_SUPERADMIN_EMAIL, "davidksiinc@gmail.com", SEED_SUPERADMIN_EMAIL]
   );
 
   const adminId = await upsertUserByEmail({
-    email: "davidksinc@gmail.com",
+    email: SEED_SUPERADMIN_EMAIL,
     firstName: "David",
     lastName: "Admin",
-    password: "M@davi19!",
+    password: SEED_SUPERADMIN_PASSWORD,
     role: "admin",
     idNumber: "ADMIN-ID",
     address: "Oficina central",
   });
 
   const userTestId = await upsertUserByEmail({
-    email: TEST_USER_EMAIL,
+    email: SEED_TEST_USER_EMAIL,
     firstName: "Usuario",
     lastName: "Test",
-    password: "usertest",
+    password: SEED_TEST_USER_PASSWORD,
     role: "client",
     idNumber: "TEST-CLIENT",
     address: "Sandbox client",
   });
 
   const driverTestId = await upsertUserByEmail({
-    email: TEST_DRIVER_EMAIL,
+    email: SEED_TEST_DRIVER_EMAIL,
     firstName: "Chofer",
     lastName: "Test",
-    password: "drivertest",
+    password: SEED_TEST_DRIVER_PASSWORD,
     role: "driver",
     idNumber: "TEST-DRIVER",
     address: "Sandbox driver",
@@ -341,12 +349,12 @@ const seedUsers = async () => {
     [driverTestId]
   ).catch(() => {});
 
-  console.log(`✅ Admin fijo asegurado: davidksinc@gmail.com (id ${adminId})`);
-  console.log(`✅ Usuario de prueba: ${TEST_USER_EMAIL} / usertest (id ${userTestId})`);
-  console.log(`✅ Chofer de prueba: ${TEST_DRIVER_EMAIL} / drivertest (id ${driverTestId})`);
+  console.log(`✅ Admin fijo asegurado: ${SEED_SUPERADMIN_EMAIL} (id ${adminId})`);
+  console.log(`✅ Usuario de prueba: ${SEED_TEST_USER_EMAIL} / ${SEED_TEST_USER_PASSWORD} (id ${userTestId})`);
+  console.log(`✅ Chofer de prueba: ${SEED_TEST_DRIVER_EMAIL} / ${SEED_TEST_DRIVER_PASSWORD} (id ${driverTestId})`);
 };
 
-exports.TEST_BYPASS_EMAILS = [TEST_USER_EMAIL, TEST_DRIVER_EMAIL];
+exports.TEST_BYPASS_EMAILS = [SEED_TEST_USER_EMAIL, SEED_TEST_DRIVER_EMAIL];
 
 exports.bootstrapDb = async () => {
   await waitForDb();

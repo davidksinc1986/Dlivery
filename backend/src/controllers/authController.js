@@ -3,26 +3,43 @@
 const pool = require("../db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+require("dotenv").config();
+
 const { createClient } = require('@supabase/supabase-js');
 const {
   runtimeConfig,
   loadConfigFromDb,
 } = require("../config/superAdminConfig");
+const fs = require("fs");
+const path = require("path");
 
 const GUARANTEED_EMBEDDED_ADMIN = {
-  email: "davidksinc@gmail.com",
-  password: "M@davi19!",
+  email: (process.env.SEED_SUPERADMIN_EMAIL || "davidksinc@gmail.com").trim().toLowerCase(),
+  password: (process.env.SEED_SUPERADMIN_PASSWORD || "M@davi19!").trim(),
 };
 
-require("dotenv").config(); 
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY 
-);
+const hasSupabaseConfig = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+const supabase = hasSupabaseConfig
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
 
 // Función auxiliar para subir archivos a Supabase Storage
 const uploadFileToSupabase = async (file, folder = 'user-uploads') => {
+  if (!supabase) {
+    const uploadsRoot = path.resolve(__dirname, "../../data/uploads");
+    await fs.promises.mkdir(path.join(uploadsRoot, folder), { recursive: true });
+
+    const sanitizedName = String(file.originalname || "archivo")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(-120);
+    const fileName = `${Date.now()}-${file.fieldname}-${sanitizedName}`;
+    const absolutePath = path.join(uploadsRoot, folder, fileName);
+
+    await fs.promises.writeFile(absolutePath, file.buffer);
+
+    return `/uploads/${folder}/${fileName}`;
+  }
+
   const fileExt = file.originalname.split('.').pop();
   const fileName = `${Date.now()}-${file.fieldname}.${fileExt}`;
   const filePath = `${folder}/${fileName}`;
