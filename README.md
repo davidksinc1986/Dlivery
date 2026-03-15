@@ -84,6 +84,25 @@ Para evitar errores de CORS/red como `CORS request did not succeed` al hacer log
   - Publica solamente `443` y enruta `/` al frontend y `/auth`, `/deliveries`, `/drivers`, `/payments`, `/admin`, `/health` al backend interno.
   - Si usas reverse proxy por mismo dominio, el frontend debe consumir el backend por **mismo origen** (sin puerto público adicional).
 
+
+## Activar cambios de `.env` en producción (pasos obligatorios)
+
+Sí: cuando se crea o cambia un `.env`, **hay que reiniciar servicios** para que tome efecto.
+
+1. **Frontend React**
+   - El `.env` se lee en build-time, así que debes reconstruir y volver a publicar:
+   - `npm run build`
+   - Reinicia el servicio que sirve estáticos (Nginx o tu proceso de frontend).
+2. **Backend Node**
+   - Reinicia el proceso (`pm2 restart`, `systemctl restart`, o contenedor) para recargar `backend/.env`.
+3. **Proxy (Nginx/Load Balancer)**
+   - Si tocaste rutas, recarga configuración: `sudo nginx -t && sudo systemctl reload nginx`.
+4. **Validación rápida**
+   - `curl -i https://dlivery.sancarlosenlinea.com/health`
+   - `curl -i https://dlivery.sancarlosenlinea.com/ops/diagnostics`
+
+> Si no haces reinicio/rebuild, el sistema seguirá usando la configuración anterior aunque el archivo `.env` exista.
+
 ## Diagnóstico de login en Google Cloud (sin tocar código adicional)
 
 Se agregaron mejoras para estabilizar login y detectar cuellos de botella de infraestructura:
