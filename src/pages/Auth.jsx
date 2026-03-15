@@ -19,6 +19,7 @@ export default function Auth() {
   const { login, register } = useAppContext();
   const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,10 +51,12 @@ export default function Auth() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setAuthError("");
+    setAuthNotice("");
 
     if (!isRegistering) {
       const result = await login(email, password);
       if (!result.success) setAuthError(result.error || "No se pudo iniciar sesión.");
+      if (result.warning) setAuthNotice(result.warning);
       return;
     }
 
@@ -146,21 +149,22 @@ export default function Auth() {
         <h1>{isRegistering ? "Registro de usuario" : "Inicio de sesión"}</h1>
         <p className="auth-form-help">Usa tus credenciales para entrar al panel operativo.</p>
         {authError && <p className="error-message">{authError}</p>}
+        {authNotice && <p className="success-message">{authNotice}</p>}
         <form onSubmit={onSubmit}>
           {isRegistering && (
             <>
               <div className="form-group"><label>Foto de perfil</label><input type="file" accept="image/*" onChange={(e) => setProfilePicture(e.target.files?.[0] || null)} required /></div>
-              <div className="form-group"><label>Nombre</label><input value={firstName} onChange={(e) => setFirstName(e.target.value)} required /></div>
-              <div className="form-group"><label>Apellido</label><input value={lastName} onChange={(e) => setLastName(e.target.value)} /></div>
+              <div className="form-group"><label>Nombre</label><input autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required /></div>
+              <div className="form-group"><label>Apellido</label><input autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} /></div>
             </>
           )}
-          <div className="form-group"><label>Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-          <div className="form-group"><label>Contraseña</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+          <div className="form-group"><label>Email</label><input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
+          <div className="form-group"><label>Contraseña</label><input type="password" autoComplete={isRegistering ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
 
           {isRegistering && (
             <>
               <div className="form-group"><label>Cédula/Pasaporte</label><input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} required /></div>
-              <div className="form-group"><label>Dirección</label><input value={address} onChange={(e) => setAddress(e.target.value)} required /></div>
+              <div className="form-group"><label>Dirección</label><input autoComplete="street-address" value={address} onChange={(e) => setAddress(e.target.value)} required /></div>
               <div className="form-group">
                 <label>Rol</label>
                 <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}>

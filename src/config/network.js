@@ -52,6 +52,25 @@ export const getApiBaseUrl = () => {
   return "http://127.0.0.1:3001";
 };
 
+const dedupeUrls = (urls) => Array.from(new Set(urls.filter(Boolean).map((url) => trimTrailingSlash(url))));
+
+export const getApiBaseUrlCandidates = () => {
+  const primaryBaseUrl = getApiBaseUrl();
+
+  if (typeof window === "undefined") {
+    return dedupeUrls([primaryBaseUrl]);
+  }
+
+  const currentOrigin = trimTrailingSlash(window.location.origin);
+
+  return dedupeUrls([
+    primaryBaseUrl,
+    `${primaryBaseUrl}/api`,
+    currentOrigin,
+    `${currentOrigin}/api`,
+  ]);
+};
+
 export const getSocketServerUrl = () => {
   const configuredUrl = safeUrl(process.env.REACT_APP_SOCKET_URL || process.env.REACT_APP_API_URL);
 

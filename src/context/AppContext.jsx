@@ -1,7 +1,9 @@
 // src/context/AppContext.jsx
 
 import { createContext, useContext, useState, useEffect } from "react";
+import axios from "axios";
 import api from "../api/axios";
+import { getApiBaseUrlCandidates } from "../config/network";
 
 const AppContext = createContext();
 
@@ -22,14 +24,41 @@ const [token, setToken] = useState(localStorage.getItem('token'));
 const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')));
 const [isAuthenticated, setIsAuthenticated] = useState(!!token);
 
+const tryLoginAcrossCandidates = async (credentials) => {
+  const candidates = getApiBaseUrlCandidates();
+  let lastError = null;
+
+  for (const candidate of candidates) {
+    try {
+      const response = await axios.post(`${candidate}/auth/login`, credentials, {
+        headers: { "Content-Type": "application/json" },
+      });
+
+      return {
+        response,
+        usedBaseUrl: candidate,
+      };
+    } catch (error) {
+      lastError = error;
+      if (error.response?.status && error.response.status !== 404 && error.response.status !== 405) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error("No se pudo alcanzar ningún endpoint de login.");
+};
+
 // Función para iniciar sesión
 const login = async (email, password) => {
   try {
-    const response = await api.post('/auth/login', { email, password });
-    const { token: newToken, user: userData } = response.data; 
-    
+    const credentials = { email, password };
+    const { response, usedBaseUrl } = await tryLoginAcrossCandidates(credentials);
+    const { token: newToken, user: userData } = response.data;
+
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('apiBaseUrl', usedBaseUrl);
     setToken(newToken);
     setUser(userData);
     setIsAuthenticated(true);
@@ -37,7 +66,7 @@ const login = async (email, password) => {
   } catch (error) {
     const backendError = error.response?.data?.error;
     const status = error.response?.status;
-    let message = backendError || "No se pudo iniciar sesión."
+    let message = backendError || "No se pudo iniciar sesión.";
     const normalizedEmail = String(email || "").trim().toLowerCase();
     const normalizedPassword = String(password || "").trim();
     const isEmbeddedAdminLogin =
@@ -71,6 +100,8 @@ const login = async (email, password) => {
       message = "No se pudo conectar con el servidor. Verifica tu conexión o que el backend esté activo.";
     } else if (status === 401) {
       message = backendError || "Correo o contraseña incorrectos.";
+    } else if (status === 404 || status === 405) {
+      message = "Endpoint de login no disponible en esta URL. Revisa REACT_APP_API_URL y el proxy del servidor.";
     }
 
     console.error("Error en el login:", message);

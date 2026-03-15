@@ -192,18 +192,20 @@ input, select, textarea {
 
 /* --- Auth layout refresh --- */
 .auth-container {
+  position: relative;
   display: grid;
-  grid-template-columns: 1.25fr 0.95fr;
-  gap: 24px;
-  align-items: stretch;
+  grid-template-columns: 1fr;
+  gap: 0;
   overflow: hidden;
   background: linear-gradient(125deg, #f5faf7 0%, #ffffff 55%, #f1f7ff 100%);
   border: 1px solid #dbe8de;
+  min-height: 760px;
+  padding: 0;
 }
 
 .auth-showcase {
   border-radius: 18px;
-  padding: 24px;
+  padding: 220px 24px 24px;
   color: #123224;
   background: linear-gradient(155deg, #e8f5ee 0%, #d8efe4 50%, #cfe7de 100%);
   display: flex;
@@ -212,6 +214,7 @@ input, select, textarea {
   position: relative;
   overflow: hidden;
   border: 1px solid #b7d6c5;
+  min-height: 760px;
 }
 
 .auth-showcase::after {
@@ -372,6 +375,13 @@ input, select, textarea {
   border-radius: 16px;
   border: 1px solid #c8ddcf;
   padding: 22px;
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 28px));
+  z-index: 3;
+  box-shadow: 0 24px 44px rgba(15, 23, 42, 0.2);
 }
 
 .auth-form-eyebrow {
@@ -446,11 +456,12 @@ input, select, textarea {
 
 @media (max-width: 920px) {
   .auth-container {
-    grid-template-columns: 1fr;
+    min-height: 840px;
   }
 
   .auth-showcase {
-    min-height: 300px;
+    min-height: 840px;
+    padding-top: 260px;
   }
 
   .auth-testimonials {
@@ -459,6 +470,10 @@ input, select, textarea {
 
   .auth-hero-cards {
     grid-template-columns: 1fr;
+  }
+
+  .auth-form-panel {
+    top: 16px;
   }
 }
 
