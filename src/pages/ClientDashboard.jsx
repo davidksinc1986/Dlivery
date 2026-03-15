@@ -9,6 +9,7 @@ import { io } from "socket.io-client";
 import { formatVehicleType, groupDeliveriesByVehicleType, parseCoordinateString } from "../utils/deliveryUtils";
 import UserProfile from "../components/UserProfile"; // Importa el nuevo componente
 import { getSocketServerUrl } from "../config/network";
+import api from "../api/axios";
 
 const SOCKET_SERVER_URL = getSocketServerUrl();
 
@@ -39,6 +40,11 @@ const [deliveryBeingTracked, setDeliveryBeingTracked] = useState(null);
 const [trackingError, setTrackingError] = useState("");
 
 const [showProfile, setShowProfile] = useState(false); // Estado para mostrar/ocultar perfil
+const [plannerCompany, setPlannerCompany] = useState("");
+const [plannerPackages, setPlannerPackages] = useState([
+  { label: "Paquete 1", package_size: "small", country: "", province: "", city: "", location_input: "", lat: 9.93, lng: -84.08, deadline: "" },
+]);
+const [plannerResult, setPlannerResult] = useState(null);
 
 // Efecto para obtener la ubicación del usuario al cargar el componente y centrar el mapa
 useEffect(() => {
@@ -146,6 +152,30 @@ const resetMapSelection = () => {
   setPriceData(null);
   setOffer("");
   alert("Selección de Origen y Destino limpiada.");
+};
+
+const addPlannerPackage = () => {
+  setPlannerPackages((prev) => [...prev, { label: `Paquete ${prev.length + 1}`, package_size: "small", country: "", province: "", city: "", location_input: "", lat: 9.93, lng: -84.08, deadline: "" }]);
+};
+
+const updatePlannerPackage = (idx, key, value) => {
+  setPlannerPackages((prev) => prev.map((pkg, index) => (index === idx ? { ...pkg, [key]: value } : pkg)));
+};
+
+const generateClientSmartPlan = async () => {
+  try {
+    const response = await api.post("/deliveries/smart-plan", {
+      company_name: plannerCompany || "Cliente Individual",
+      monthly_priority_active: true,
+      max_deviation_km: 3,
+      start_point: originCoords || { lat: 9.9358, lng: -84.0994, address: "Origen general" },
+      end_point: destinationCoords || { lat: 10.0162, lng: -84.2116, address: "Destino general" },
+      packages: plannerPackages,
+    });
+    setPlannerResult(response.data.plan);
+  } catch (error) {
+    setDeliveryError(error.response?.data?.error || "No se pudo generar el plan de paquetes.");
+  }
 };
 
 // Calcular el precio estimado del viaje
@@ -387,6 +417,35 @@ return (
         )}
 
         {/* Listado de entregas del usuario, agrupadas por tipo de vehículo */}
+        <div className="create-delivery-section">
+          <h2>Planificador inteligente de paquetes múltiples</h2>
+          <p className="help-chip">ℹ️ Puedes agregar varios paquetes con país, provincia, ciudad, coordenadas/maps y fecha límite (no same-day).</p>
+          <input
+            type="text"
+            placeholder="Compañía (opcional)"
+            value={plannerCompany}
+            onChange={(e) => setPlannerCompany(e.target.value)}
+          />
+          {plannerPackages.map((pkg, idx) => (
+            <div key={`${pkg.label}-${idx}`} className="admin-inline-inputs compact package-editor" style={{marginTop:'12px'}}>
+              <input value={pkg.label} onChange={(e) => updatePlannerPackage(idx, "label", e.target.value)} placeholder="Etiqueta" />
+              <select value={pkg.package_size} onChange={(e) => updatePlannerPackage(idx, "package_size", e.target.value)}>
+                <option value="small">Pequeño</option><option value="medium">Mediano</option><option value="large">Grande</option><option value="xlarge">Extra Big</option>
+              </select>
+              <input value={pkg.country} onChange={(e) => updatePlannerPackage(idx, "country", e.target.value)} placeholder="País" />
+              <input value={pkg.province} onChange={(e) => updatePlannerPackage(idx, "province", e.target.value)} placeholder="Provincia" />
+              <input value={pkg.city} onChange={(e) => updatePlannerPackage(idx, "city", e.target.value)} placeholder="Ciudad" />
+              <input value={pkg.location_input} onChange={(e) => updatePlannerPackage(idx, "location_input", e.target.value)} placeholder="Maps URL o coordenadas" />
+              <input type="number" value={pkg.lat} onChange={(e) => updatePlannerPackage(idx, "lat", Number(e.target.value))} placeholder="Lat" />
+              <input type="number" value={pkg.lng} onChange={(e) => updatePlannerPackage(idx, "lng", Number(e.target.value))} placeholder="Lng" />
+              <input type="datetime-local" value={pkg.deadline} onChange={(e) => updatePlannerPackage(idx, "deadline", e.target.value)} />
+            </div>
+          ))}
+          <button className="small-button" onClick={addPlannerPackage}>+ Agregar paquete</button>
+          <button className="primary-button" onClick={generateClientSmartPlan}>Analizar rutas idóneas</button>
+          {plannerResult && <p style={{marginTop:'10px'}}>Rutas sugeridas: {plannerResult.routes?.length || 0}</p>}
+        </div>
+
         <div className="delivery-list-section">
           <h2>Mis Entregas ({deliveries.length})</h2>
           {deliveries.length === 0 ? (

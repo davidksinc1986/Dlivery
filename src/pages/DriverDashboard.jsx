@@ -21,11 +21,18 @@ const [driverError, setDriverError] = useState("");
 const [pinInput, setPinInput] = useState("");
 const [totalEarnings, setTotalEarnings] = useState(0);
 const [notifications, setNotifications] = useState([]);
+const [routeModeActive, setRouteModeActive] = useState(false);
+const [driverBatchRules, setDriverBatchRules] = useState([]);
 
 const socketRef = useRef(null);
 const currentDeliveryIntervalIdRef = useRef(null);
 
 const [showProfile, setShowProfile] = useState(false); // Estado para mostrar/ocultar perfil
+
+useEffect(() => {
+  const savedRules = localStorage.getItem("dlivery_driver_batch_rules");
+  if (savedRules) setDriverBatchRules(JSON.parse(savedRules));
+}, []);
 
 // Limpiar y reconectar Socket.IO al desmontar o cambiar user/token
 useEffect(() => {
@@ -320,6 +327,17 @@ const groupedOfferDeliveries = groupDeliveriesByVehicleType(offerDeliveries);
 const groupedAssignedDeliveries = groupDeliveriesByVehicleType(assignedDeliveries);
 const groupedInProgressDeliveries = groupDeliveriesByVehicleType(inProgressDeliveries);
 
+const getBatchDiscountPercent = (packageCount = 1) => {
+  const matchingRule = driverBatchRules.find((rule) => Number(packageCount) >= Number(rule.min_packages) && Number(packageCount) <= Number(rule.max_packages));
+  return Number(matchingRule?.discount_percent || 0);
+};
+
+const getEstimatedDriverPayout = (delivery) => {
+  const packageCount = Number(delivery?.package_count || 1);
+  const discountPercent = routeModeActive ? getBatchDiscountPercent(packageCount) : 0;
+  return Number(delivery.price_estimate) * ((100 - discountPercent) / 100);
+};
+
 return (
   <div className="container">
     <header className="app-header">
@@ -351,6 +369,10 @@ return (
           <button onClick={toggleAvailability} className={`primary-button ${isDriverAvailable ? 'available' : 'unavailable'}`}>
             {isDriverAvailable ? 'Estoy Disponible (Online)' : 'No Disponible (Offline)'}
           </button>
+          <button onClick={() => setRouteModeActive((prev) => !prev)} className={`primary-button ${routeModeActive ? 'available' : ''}`} style={{marginLeft: '8px'}}>
+            {routeModeActive ? 'Rutas en Serie: ACTIVAS' : 'Activar rutas en serie'}
+          </button>
+          <p style={{marginTop: '8px', color: '#6c7891'}}>En rutas en serie el pago por paquete puede disminuir según rangos configurados por super user.</p>
           {driverError && <p className="error-message">{driverError}</p>}
         </div>
 
@@ -383,6 +405,7 @@ return (
                       <p>Origen: {delivery.origin}</p>
                       <p>Destino: {delivery.destination}</p>
                       <p>Estimado: ₡{delivery.price_estimate}</p>
+                      <p>Pago conductor estimado: ₡{getEstimatedDriverPayout(delivery).toFixed(0)}</p>
                       <button onClick={() => handleAcceptDelivery(delivery.id)} className="primary-button">Aceptar Entrega</button>
                     </div>
                   ))}
@@ -412,6 +435,7 @@ return (
                       <p>Origen: {delivery.origin}</p>
                       <p>Destino: {delivery.destination}</p>
                       <p>Oferta del Cliente: ₡{delivery.price_estimate}</p>
+                      <p>Pago conductor estimado: ₡{getEstimatedDriverPayout(delivery).toFixed(0)}</p>
                       <button onClick={() => handleAcceptDelivery(delivery.id)} className="primary-button">Aceptar Oferta</button>
                     </div>
                   ))}
