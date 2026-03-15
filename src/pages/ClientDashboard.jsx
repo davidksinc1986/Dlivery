@@ -471,8 +471,8 @@ return (
                         </div>
                       )}
                       <p>Descripción: {delivery.description}</p>
-                      <p>Origen: {delivery.origin}</p>
-                      <p>Destino: {delivery.destination}</p>
+                      <p>Origen: <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(delivery.origin || "")}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
+                      <p>Destino: <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(delivery.destination || "")}`} target="_blank" rel="noopener noreferrer">Abrir en Maps</a></p>
                       <p>Precio Estimado: ₡{delivery.price_estimate}</p>
                       <p>Estado de Pago: {delivery.payment_status}</p>
                       <p>Tipo de Servicio: {delivery.service_id === 1 ? 'Directo' : 'Pool de Ofertas'}</p>
