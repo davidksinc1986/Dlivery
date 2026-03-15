@@ -7,6 +7,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const multer = require("multer"); // Importar Multer
+const path = require("path");
 
 const pool = require("./db");
 const deliveryRoutes = require("./routes/deliveryRoutes");
@@ -35,6 +36,39 @@ const allowedOrigins = (process.env.FRONTEND_ORIGIN || "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const isProduction = process.env.NODE_ENV === "production";
+const publicOrigin = process.env.PUBLIC_ORIGIN || "";
+
+const serverDiagnostics = () => {
+  const warnings = [];
+
+  if (!process.env.DATABASE_URL) {
+    warnings.push("DATABASE_URL no está configurada.");
+  }
+
+  if (!process.env.FRONTEND_ORIGIN && isProduction) {
+    warnings.push("FRONTEND_ORIGIN vacío en producción; CORS puede bloquear login.");
+  }
+
+  if (publicOrigin.startsWith("https://") && String(process.env.PORT || "3001") === "3001") {
+    warnings.push("Si expones HTTPS por proxy inverso, no publiques el puerto 3001 al cliente final.");
+  }
+
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    warnings.push("Supabase Storage no configurado; se usa almacenamiento local en /uploads.");
+  }
+
+  return {
+    nodeEnv: process.env.NODE_ENV || "development",
+    port: Number(process.env.PORT || 3001),
+    frontendOrigins: allowedOrigins,
+    publicOrigin,
+    hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+    hasSupabaseConfig: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+    warnings,
+  };
+};
+
 app.use(cors({
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
@@ -52,6 +86,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.post("/payments/webhook", express.raw({ type: 'application/json' }), paymentController.handleStripeWebhook);
 
 app.use(express.json()); // Middleware para parsear JSON (después del webhook raw)
+app.use("/uploads", express.static(path.resolve(__dirname, "../data/uploads")));
 
 // --- Rutas HTTP (REST API) ---
 
@@ -72,6 +107,10 @@ app.get("/health", async (req, res) => {
     console.log("ERROR DB:", err.message);
     res.status(503).json({ status: "down", db: "disconnected", error: err.message });
   }
+});
+
+app.get("/ops/diagnostics", (_req, res) => {
+  res.json(serverDiagnostics());
 });
 
 app.get("/services", async (req, res) => {
@@ -229,6 +268,10 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3001;
 
+server.listen(PORT, () => {
+  console.log(`Servidor de Express y Socket.IO corriendo en puerto ${PORT}`);
+});
+
 bootstrapDb()
   .then(() => {
     dbBootstrapReady = true;
@@ -238,9 +281,4 @@ bootstrapDb()
   .catch((error) => {
     dbBootstrapReady = false;
     console.error("Error en bootstrap de base de datos (modo degradado activo):", error.message);
-  })
-  .finally(() => {
-    server.listen(PORT, () => {
-      console.log(`Servidor de Express y Socket.IO corriendo en puerto ${PORT}`);
-    });
   });

@@ -83,3 +83,47 @@ Para evitar errores de CORS/red como `CORS request did not succeed` al hacer log
 - **Nginx / Load Balancer**
   - Publica solamente `443` y enruta `/` al frontend y `/auth`, `/deliveries`, `/drivers`, `/payments`, `/admin`, `/health` al backend interno.
   - Si usas reverse proxy por mismo dominio, el frontend debe consumir el backend por **mismo origen** (sin puerto público adicional).
+
+## Diagnóstico de login en Google Cloud (sin tocar código adicional)
+
+Se agregaron mejoras para estabilizar login y detectar cuellos de botella de infraestructura:
+
+- Endpoint de diagnóstico backend: `GET /ops/diagnostics`.
+- Healthcheck de DB: `GET /health`.
+- Storage fallback local: si faltan `SUPABASE_URL` y `SUPABASE_ANON_KEY`, los archivos se guardan en `backend/data/uploads` y se sirven en `/uploads/*`.
+- Seeds de credenciales controlados por `.env` (`SEED_*`).
+
+### Checklist de puertos / security bridge recomendado
+
+1. **Firewall GCP / VPC**
+   - Exponer únicamente `80/443` públicamente.
+   - Mantener `3001` como puerto interno (loopback o red privada).
+2. **Reverse proxy (Nginx/Load Balancer)**
+   - `https://dlivery.sancarlosenlinea.com/` -> frontend.
+   - `https://dlivery.sancarlosenlinea.com/auth|deliveries|drivers|payments|admin|health|ops` -> backend interno `127.0.0.1:3001`.
+3. **CORS**
+   - `FRONTEND_ORIGIN=https://dlivery.sancarlosenlinea.com`.
+4. **Egress a DB**
+   - Si usas Supabase, confirmar salida TCP/5432 habilitada.
+   - Si no hay egress confiable, usar PostgreSQL local interno.
+
+## PostgreSQL local interno (alternativa a Supabase)
+
+Puedes mover la DB al mismo servidor para evitar bloqueo de salida y latencia:
+
+1. Instalar PostgreSQL localmente.
+2. Crear DB/usuario:
+
+```sql
+CREATE USER dlivery WITH PASSWORD 'cambiar_password';
+CREATE DATABASE dlivery OWNER dlivery;
+```
+
+3. En `backend/.env`:
+
+```env
+DATABASE_URL=postgresql://dlivery:cambiar_password@127.0.0.1:5432/dlivery
+PG_SSL=false
+```
+
+4. Reiniciar backend; el bootstrap crea/ajusta esquema y usuarios semilla automáticamente.
