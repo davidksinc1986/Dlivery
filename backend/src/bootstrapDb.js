@@ -222,6 +222,21 @@ const setupSchema = async () => {
     );
   `);
 
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      contact_name TEXT,
+      contact_email TEXT,
+      phone TEXT,
+      status TEXT DEFAULT 'active',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,

@@ -1,3 +1,4 @@
+const bcrypt = require("bcrypt");
 const pool = require("../db");
 const {
   asSerializable,
@@ -199,4 +200,151 @@ exports.updateSystemConfig = async (req, res) => {
     message: "Configuración del sistema actualizada.",
     config: next,
   });
+};
+
+
+exports.createUser = async (req, res) => {
+  try {
+    const { first_name, last_name, email, password, role = "client" } = req.body || {};
+    if (!first_name || !last_name || !email || !password) {
+      return res.status(400).json({ error: "Nombre, apellido, email y contraseña son obligatorios." });
+    }
+
+    const hash = await bcrypt.hash(String(password), 10);
+    const result = await pool.query(
+      `INSERT INTO users(first_name, last_name, email, password, role, created_at)
+       VALUES($1, $2, LOWER($3), $4, $5, NOW())
+       RETURNING id, first_name, last_name, email, role, rating, rating_count, created_at, profile_picture_url`,
+      [first_name, last_name, email, hash, role]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (String(error.message || "").includes("users_email_key")) {
+      return res.status(400).json({ error: "Ya existe un usuario con este correo." });
+    }
+    res.status(500).json({ error: "No se pudo crear el usuario." });
+  }
+};
+
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { first_name, last_name, email, role, password } = req.body || {};
+
+    const current = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
+    if (!current.rows.length) return res.status(404).json({ error: "Usuario no encontrado." });
+
+    const next = current.rows[0];
+    const nextPassword = password ? await bcrypt.hash(String(password), 10) : next.password;
+
+    const result = await pool.query(
+      `UPDATE users
+       SET first_name = $1,
+           last_name = $2,
+           email = LOWER($3),
+           role = $4,
+           password = $5
+       WHERE id = $6
+       RETURNING id, first_name, last_name, email, role, rating, rating_count, created_at, profile_picture_url`,
+      [first_name ?? next.first_name, last_name ?? next.last_name, email ?? next.email, role ?? next.role, nextPassword, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo actualizar el usuario." });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query("DELETE FROM users WHERE id = $1 RETURNING id", [id]);
+    if (!result.rows.length) return res.status(404).json({ error: "Usuario no encontrado." });
+    res.json({ message: "Usuario eliminado." });
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo eliminar el usuario." });
+  }
+};
+
+exports.createDriver = async (req, res) => {
+  req.body = { ...(req.body || {}), role: "driver" };
+  return exports.createUser(req, res);
+};
+
+exports.updateDriver = async (req, res) => {
+  req.body = { ...(req.body || {}), role: "driver" };
+  return exports.updateUser(req, res);
+};
+
+exports.deleteDriver = async (req, res) => {
+  return exports.deleteUser(req, res);
+};
+
+exports.getCompanies = async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, contact_name, contact_email, phone, status, notes, created_at, updated_at
+       FROM companies
+       ORDER BY created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "No se pudieron cargar las empresas." });
+  }
+};
+
+exports.createCompany = async (req, res) => {
+  try {
+    const { name, contact_name, contact_email, phone, status = "active", notes = "" } = req.body || {};
+    if (!name) return res.status(400).json({ error: "El nombre de la empresa es obligatorio." });
+
+    const result = await pool.query(
+      `INSERT INTO companies(name, contact_name, contact_email, phone, status, notes, created_at, updated_at)
+       VALUES($1, $2, $3, $4, $5, $6, NOW(), NOW())
+       RETURNING id, name, contact_name, contact_email, phone, status, notes, created_at, updated_at`,
+      [name, contact_name || null, contact_email || null, phone || null, status, notes || null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo crear la empresa." });
+  }
+};
+
+exports.updateCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, contact_name, contact_email, phone, status, notes } = req.body || {};
+
+    const result = await pool.query(
+      `UPDATE companies
+       SET name = $1,
+           contact_name = $2,
+           contact_email = $3,
+           phone = $4,
+           status = $5,
+           notes = $6,
+           updated_at = NOW()
+       WHERE id = $7
+       RETURNING id, name, contact_name, contact_email, phone, status, notes, created_at, updated_at`,
+      [name, contact_name || null, contact_email || null, phone || null, status || "active", notes || null, id]
+    );
+
+    if (!result.rows.length) return res.status(404).json({ error: "Empresa no encontrada." });
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo actualizar la empresa." });
+  }
+};
+
+exports.deleteCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query("DELETE FROM companies WHERE id = $1 RETURNING id", [id]);
+    if (!result.rows.length) return res.status(404).json({ error: "Empresa no encontrada." });
+    res.json({ message: "Empresa eliminada." });
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo eliminar la empresa." });
+  }
 };
