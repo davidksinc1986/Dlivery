@@ -65,3 +65,21 @@ Se agregó un flujo para clientes corporativos con prioridad mensual:
 - Incluye ranking de conductores por disponibilidad + cercanía + rating.
 - Si un conductor rechaza un viaje asignado: `POST /drivers/deliveries/:delivery_id/decline` reasigna al siguiente conductor elegible por ranking; si no hay candidato vuelve al pool.
 - Admin/Super Admin puede monitorear conductores activos en mapa con `GET /admin/drivers/live-locations`; mientras estén activos se actualiza su posición y, al desconectarse, queda guardada su última ubicación conocida.
+
+## Configuración recomendada en Google Cloud (producción)
+
+Para evitar errores de CORS/red como `CORS request did not succeed` al hacer login:
+
+- **Frontend (`.env`)**
+  - `REACT_APP_API_URL=https://dlivery.sancarlosenlinea.com`
+  - `REACT_APP_SOCKET_URL=https://dlivery.sancarlosenlinea.com`
+  - Evita usar `:3001` en HTTPS público, salvo que ese puerto esté realmente expuesto con TLS válido.
+
+- **Backend (`backend/.env`)**
+  - `PORT=3001`
+  - `FRONTEND_ORIGIN=https://dlivery.sancarlosenlinea.com`
+  - Puedes agregar varios dominios separados por comas, por ejemplo: `FRONTEND_ORIGIN=https://dlivery.sancarlosenlinea.com,https://admin.dlivery.com`
+
+- **Nginx / Load Balancer**
+  - Publica solamente `443` y enruta `/` al frontend y `/auth`, `/deliveries`, `/drivers`, `/payments`, `/admin`, `/health` al backend interno.
+  - Si usas reverse proxy por mismo dominio, el frontend debe consumir el backend por **mismo origen** (sin puerto público adicional).

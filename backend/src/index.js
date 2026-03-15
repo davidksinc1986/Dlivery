@@ -30,8 +30,18 @@ const io = new Server(server, {
   }
 });
 
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(cors({
-    origin: process.env.FRONTEND_ORIGIN || true,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("CORS origin no permitido"));
+    },
     credentials: true
 }));
 

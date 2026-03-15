@@ -8,8 +8,9 @@ import MapComponent from "../components/Map/MapComponent";
 import { io } from "socket.io-client";
 import { formatVehicleType, groupDeliveriesByVehicleType, parseCoordinateString } from "../utils/deliveryUtils";
 import UserProfile from "../components/UserProfile"; // Importa el nuevo componente
+import { getSocketServerUrl } from "../config/network";
 
-const SOCKET_SERVER_URL = "http://localhost:3001";
+const SOCKET_SERVER_URL = getSocketServerUrl();
 
 export default function ClientDashboard() {
 const {
