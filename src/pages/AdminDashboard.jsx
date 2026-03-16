@@ -8,6 +8,13 @@ const TAB_DRIVERS = "drivers";
 const TAB_COMPANIES = "companies";
 const TAB_WIZARD = "wizard";
 
+const tabMeta = {
+  [TAB_USERS]: { label: "Usuarios", hint: "CRUD de clientes" },
+  [TAB_DRIVERS]: { label: "Conductores", hint: "Estado y mapa live" },
+  [TAB_COMPANIES]: { label: "Empresas", hint: "CRM y acuerdos" },
+  [TAB_WIZARD]: { label: "Crear viajes", hint: "Rutas inteligentes" },
+};
+
 const emptyPerson = { first_name: "", last_name: "", email: "", password: "" };
 const emptyCompany = { name: "", contact_name: "", contact_email: "", phone: "", status: "active", notes: "" };
 
@@ -212,6 +219,8 @@ export default function AdminDashboard() {
     .filter((driver) => Number.isFinite(Number(driver.lat)) && Number.isFinite(Number(driver.lng)))
     .map((driver) => ({ position: [Number(driver.lat), Number(driver.lng)], popupText: `${driver.first_name} ${driver.last_name}` })), [liveDrivers]);
 
+  const activeTabDetails = tabMeta[activeTab] || tabMeta[TAB_USERS];
+
   const EditableTable = ({ rows, type, setRows }) => (
     <div className="admin-table-wrap">
       <table className="admin-table">
@@ -261,23 +270,44 @@ export default function AdminDashboard() {
   return (
     <div className="container admin-biance uber-ish-shell">
       <header className="app-header admin-header-dark">
-        <h1>Super Dashboard</h1>
+        <div>
+          <p className="admin-header-kicker">Control center · Dlivery</p>
+          <h1>Super Dashboard</h1>
+        </div>
         <div className="user-info">
           <span>{user?.first_name} {user?.last_name}</span>
           <button className="logout-button" onClick={logout}>Cerrar sesión</button>
         </div>
       </header>
 
+      <section className="admin-hero">
+        <div className="admin-hero-panel">
+          <p className="admin-hero-kicker">Centro operativo</p>
+          <h2>{activeTabDetails.label}</h2>
+          <p>{activeTabDetails.hint}. Administra operaciones, métricas y ejecución de entregas con una interfaz más clara.</p>
+          <div className="admin-hero-quick-actions">
+            <button className="primary-button" onClick={() => setActiveTab(TAB_WIZARD)}>Crear viaje</button>
+            <button className="small-button" onClick={() => setActiveTab(TAB_DRIVERS)}>Ver conductores live</button>
+          </div>
+        </div>
+        <div className="admin-hero-map" aria-hidden="true">
+          <div className="admin-hero-map-overlay">Live network</div>
+        </div>
+      </section>
+
       <div className="binance-kpis">
-        <div className="delivery-card"><h3>Usuarios</h3><p>{overview?.users || 0}</p></div>
-        <div className="delivery-card"><h3>Conductores</h3><p>{overview?.drivers || 0}</p></div>
-        <div className="delivery-card"><h3>Entregas</h3><p>{overview?.deliveries || 0}</p></div>
-        <div className="delivery-card"><h3>Ingresos</h3><p>₡{overview?.grossRevenue || 0}</p></div>
+        <div className="delivery-card stat-card"><h3>Usuarios</h3><p>{overview?.users || 0}</p></div>
+        <div className="delivery-card stat-card"><h3>Conductores</h3><p>{overview?.drivers || 0}</p></div>
+        <div className="delivery-card stat-card"><h3>Entregas</h3><p>{overview?.deliveries || 0}</p></div>
+        <div className="delivery-card stat-card"><h3>Ingresos</h3><p>₡{overview?.grossRevenue || 0}</p></div>
       </div>
 
       <div className="admin-tabs">
         {[TAB_USERS, TAB_DRIVERS, TAB_COMPANIES, TAB_WIZARD].map((tab) => (
-          <button key={tab} className={`tab-pill ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>{tab}</button>
+          <button key={tab} className={`tab-pill ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>
+            <span>{tabMeta[tab].label}</span>
+            <small>{tabMeta[tab].hint}</small>
+          </button>
         ))}
       </div>
 
